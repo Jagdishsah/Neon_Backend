@@ -11,6 +11,42 @@ import time
 # --- CONFIGURATION ---
 st.set_page_config(page_title="NEPSE Pro Terminal", page_icon="📈", layout="wide")
 
+# --- AUTHENTICATION ENGINE ---
+def check_password():
+    """Returns `True` if the user had the correct password."""
+    
+    def password_entered():
+        """Checks whether a password entered by the user is correct."""
+        if st.session_state["password"] == st.secrets["app_password"]:
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]  # don't store password
+        else:
+            st.session_state["password_correct"] = False
+
+    if "password_correct" not in st.session_state:
+        # First run, show input for password.
+        st.header("🔒 NEPSE Pro Terminal")
+        st.text_input(
+            "Enter Password", type="password", on_change=password_entered, key="password"
+        )
+        st.caption("Please log in to access your portfolio.")
+        return False
+    elif not st.session_state["password_correct"]:
+        # Password incorrect, show input + error.
+        st.header("🔒 NEPSE Pro Terminal")
+        st.text_input(
+            "Enter Password", type="password", on_change=password_entered, key="password"
+        )
+        st.error("😕 Password incorrect")
+        return False
+    else:
+        # Password correct.
+        return True
+
+if not check_password():
+    st.stop()
+
+
 # Constants
 SEBON_FEE = 0.015 / 100
 DP_CHARGE = 25
@@ -941,6 +977,7 @@ elif menu == "Manage Data":
                 save_data(fname, pd.DataFrame()) # Save empty
                 st.error(f"{del_opt} has been wiped.")
                 st.cache_data.clear()
+
 
 
 
