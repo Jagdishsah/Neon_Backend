@@ -51,6 +51,8 @@ def get_data(filename):
         elif "watchlist" in filename: cols = ["Symbol", "Target", "Remark"]
             # Update this line inside get_data():
         elif "history" in filename: cols = ["Date", "Symbol", "Units", "Buy_Price", "Sell_Price", "Net_PL", "Reason"]
+        # Update this line inside get_data():
+        elif "diary" in filename: cols = ["Date", "Symbol", "Note", "Emotion", "Mistake", "Strategy"]
         elif "cache" in filename: cols = ["Symbol", "LTP", "Change", "High52", "Low52", "LastUpdated"]
         else: cols = []
         return pd.DataFrame(columns=cols)
@@ -224,8 +226,7 @@ def calculate_metrics(units, cost, ltp, change=0):
 # --- NAVIGATION ---
 st.sidebar.title("🚀 NEPSE Terminal")
 menu = st.sidebar.radio("Main Menu", 
-    ["Dashboard", "Portfolio", "Watchlist", "Add Trade", "Sell Stock", "History", "Wealth Graph", "WACC Projection", "What If Analysis", "Reports", "Manage Data"]
-  )
+    [ "Dashboard", "Portfolio", "Watchlist", "Add Trade", "Sell Stock", "History", "Wealth Graph", "WACC Projection", "What If Analysis", "Reports", "Manage Data", "Trading Journal", "Risk Manager" ] )
 if st.sidebar.button("🔄 Refresh Market Data"):
     refresh_market_cache()
     st.rerun()
@@ -806,6 +807,107 @@ elif menu == "Reports":
         href = f'<a href="data:application/octet-stream;base64,{b64}" download="NEPSE_Report.pdf" style="text-decoration:none; padding:10px; background-color:#4CAF50; color:white; border-radius:5px;">📥 Click to Download PDF</a>'
         st.markdown(href, unsafe_allow_html=True)
 
+# ================= PSYCHOLOGY JOURNAL (NEW) =================
+elif menu == "Trading Journal":
+    st.title("🧠 Psychology Journal")
+    
+    diary = get_data("diary.csv")
+    
+    with st.form("journal_entry"):
+        c1, c2 = st.columns(2)
+        d_date = c1.date_input("Date")
+        d_sym = c2.text_input("Symbol (Optional)").upper()
+        
+        c3, c4 = st.columns(2)
+        d_emo = c3.selectbox("Primary Emotion", ["Calm/Focused", "Fear/Anxiety", "Greed/Overconfidence", "FOMO", "Boredom", "Revenge"])
+        d_strat = c4.selectbox("Strategy Used", ["Trend Following", "Swing Trade", "Breakout", "Fundamental", "Impulse/Gamble"])
+        
+        d_note = st.text_area("Detailed Thought Process")
+        d_mistake = st.text_input("Did you make a mistake?", placeholder="e.g., Sold too early, Moved SL")
+        
+        if st.form_submit_button("Log Entry"):
+            new_entry = pd.DataFrame([{
+                "Date": str(d_date),
+                "Symbol": d_sym,
+                "Note": d_note,
+                "Emotion": d_emo,
+                "Strategy": d_strat,
+                "Mistake": d_mistake
+            }])
+            diary = pd.concat([diary, new_entry], ignore_index=True)
+            save_data("diary.csv", diary)
+            st.success("Journal Updated!")
+            st.rerun()
+            
+    if not diary.empty:
+        st.markdown("---")
+        st.subheader("Your Mindset Analysis")
+        
+        # Simple Analytics
+        emo_counts = diary["Emotion"].value_counts().reset_index()
+        emo_counts.columns = ["Emotion", "Count"]
+        
+        col_chart, col_list = st.columns([1, 2])
+        
+        with col_chart:
+            fig = px.pie(emo_counts, values="Count", names="Emotion", title="Emotional State", hole=0.4)
+            fig.update_layout(showlegend=False, height=250, margin=dict(t=30, b=0, l=0, r=0))
+            st.plotly_chart(fig, use_container_width=True)
+            
+        with col_list:
+            st.markdown("#### Recent Entries")
+            # Show latest first
+            for i, row in diary[::-1].head(5).iterrows():
+                emoji = "🧘" if "Calm" in row["Emotion"] else "😨" if "Fear" in row["Emotion"] else "🤑"
+                st.info(f"{emoji} **{row['Date']}** ({row['Symbol']}): {row['Note']} _[{row['Strategy']}]_")
+
+# ================= RISK MANAGER (NEW) =================
+elif menu == "Risk Manager":
+    st.title("🛡️ Position Size Calculator")
+    st.caption("Never lose more than you can afford.")
+    
+    # Auto-fetch Portfolio Value for calculation
+    port = get_data("portfolio.csv")
+    cache = get_data("cache.csv")
+    total_capital = 0
+    if not port.empty:
+        if not cache.empty:
+            df = pd.merge(port, cache, on="Symbol", how="left").fillna(0)
+            for _, r in df.iterrows():
+                p = r.get("LTP", 0) if r.get("LTP", 0) > 0 else r["WACC"]
+                total_capital += r["Units"] * p
+        else:
+            total_capital = port["Total_Cost"].sum()
+            
+    # Inputs
+    c1, c2, c3 = st.columns(3)
+    capital = c1.number_input("Total Capital", value=float(total_capital) if total_capital > 0 else 100000.0)
+    risk_pct = c2.number_input("Risk per Trade (%)", min_value=0.1, max_value=5.0, value=2.0, step=0.1)
+    entry = c3.number_input("Entry Price", min_value=1.0, value=100.0)
+    
+    sl = st.number_input("Stop Loss Price", min_value=0.0, max_value=entry-0.1, value=entry*0.95)
+    
+    if st.button("Calculate Position Size"):
+        # Logic
+        risk_amount = capital * (risk_pct / 100)
+        loss_per_share = entry - sl
+        
+        if loss_per_share > 0:
+            max_qty = int(risk_amount / loss_per_share)
+            total_investment = max_qty * entry
+            
+            st.markdown("---")
+            col_res1, col_res2, col_res3 = st.columns(3)
+            
+            col_res1.metric("Max Quantity to Buy", f"{max_qty} Units")
+            col_res2.metric("Total Investment", f"Rs {total_investment:,.0f}")
+            col_res3.metric("Max Potential Loss", f"Rs {risk_amount:,.0f}", help="If SL hits, you lose exactly this amount.")
+            
+            if total_investment > capital:
+                st.warning(f"⚠️ Warning: You need Rs {total_investment:,.0f} but only have Rs {capital:,.0f}. Reduce position or tighten SL.")
+        else:
+            st.error("Stop Loss must be lower than Entry Price.")
+
 # ================= MANAGE DATA =================
 elif menu == "Manage Data":
     st.title("🛠 Data Editor")
@@ -839,6 +941,7 @@ elif menu == "Manage Data":
                 save_data(fname, pd.DataFrame()) # Save empty
                 st.error(f"{del_opt} has been wiped.")
                 st.cache_data.clear()
+
 
 
 
