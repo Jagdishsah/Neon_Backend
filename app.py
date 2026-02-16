@@ -151,7 +151,21 @@ if menu == "Dashboard":
         c3.metric("Total Profit", f"Rs. {total_pl:,.0f}")
 
         # Table
-        st.dataframe(pd.DataFrame(display_data).style.format("{:.1f}"), use_container_width=True)
+        # Create the DataFrame
+        final_df = pd.DataFrame(display_data)
+
+        # Apply specific formatting only to the number columns
+        st.dataframe(
+            final_df.style.format({
+                "Units": "{:.0f}",
+                "LTP": "{:.2f}",
+                "WACC": "{:.2f}",
+                "Invested": "{:,.2f}",
+                "Value": "{:,.2f}",
+                "Profit": "{:,.2f}"
+            }), 
+            use_container_width=True
+        )
 
 # ==========================================
 # PAGE: ADD TRADE
@@ -212,3 +226,4 @@ elif menu == "Delete Trade":
                 st.cache_data.clear()
             else:
                 st.error("Failed to delete.")
+
