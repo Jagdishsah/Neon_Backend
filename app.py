@@ -1,6 +1,6 @@
 import streamlit as st
-from streamlit_gsheets import GSheetsConnection
 import pandas as pd
+import gspread
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
@@ -8,15 +8,30 @@ from datetime import datetime
 # --- CONFIGURATION ---
 st.set_page_config(page_title="NEPSE Cloud Terminal", page_icon="☁️", layout="wide")
 
+# 🛑 PASTE YOUR GOOGLE SHEET URL HERE 
+# (Make sure this is YOUR actual sheet link)
+
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1jf810Q3V5XquNE9cI7kjyC6kwxs0dxnw1moNLk1Wtqw/edit" 
+
 # Fees
 SEBON_FEE = 0.015 / 100
 DP_CHARGE = 25
 CGT_SHORT = 7.5 / 100
 CGT_LONG = 5.0 / 100
 
-# --- GOOGLE SHEETS CONNECTION ---
-# This looks for secrets.toml automatically
-conn = st.connection("gsheets", type=GSheetsConnection)
+# --- CONNECTION FUNCTION ---
+def get_google_sheet_data(worksheet_name):
+    """Connects to Google Sheets using standard gspread library"""
+    try:
+        # Load credentials from secrets.toml
+        credentials = st.secrets["gspread_credentials"]
+        gc = gspread.service_account_from_dict(credentials)
+        sh = gc.open_by_url(SHEET_URL)
+        worksheet = sh.worksheet(worksheet_name)
+        data = worksheet.get_all_records()
+        return pd.DataFrame(data), worksheet
+    except Exception as e:
+        return pd.DataFrame(), None
 
 # --- HELPER FUNCTIONS ---
 def get_broker_commission(amount):
@@ -56,31 +71,17 @@ def calculate_metrics(units, total_buy_cost, current_price, is_long_term=False):
     return net_receivable, net_pl, pl_percent, tax_amount
 
 # --- LOAD DATA ---
-def load_data():
-    # Load Portfolio
-    try:
-        df_p = conn.read(worksheet="Portfolio", ttl=0)
-        # Ensure columns exist and types are correct
-        if df_p.empty:
-            df_p = pd.DataFrame(columns=["Symbol", "Units", "Total_Cost", "WACC", "Notes"])
-        else:
-            df_p["Units"] = pd.to_numeric(df_p["Units"], errors='coerce').fillna(0)
-            df_p["Total_Cost"] = pd.to_numeric(df_p["Total_Cost"], errors='coerce').fillna(0)
-            df_p["WACC"] = pd.to_numeric(df_p["WACC"], errors='coerce').fillna(0)
-    except:
-        df_p = pd.DataFrame(columns=["Symbol", "Units", "Total_Cost", "WACC", "Notes"])
+df_portfolio, portfolio_worksheet = get_google_sheet_data("Portfolio")
+df_sales, sales_worksheet = get_google_sheet_data("Sales")
 
-    # Load Sales History
-    try:
-        df_s = conn.read(worksheet="Sales", ttl=0)
-        if df_s.empty:
-            df_s = pd.DataFrame(columns=["Date", "Symbol", "Units", "Sell_Price", "Net_PL", "Remarks"])
-    except:
-        df_s = pd.DataFrame(columns=["Date", "Symbol", "Units", "Sell_Price", "Net_PL", "Remarks"])
-        
-    return df_p, df_s
-
-df_portfolio, df_sales = load_data()
+# Ensure columns exist
+if df_portfolio.empty:
+    df_portfolio = pd.DataFrame(columns=["Symbol", "Units", "Total_Cost", "WACC", "Notes"])
+else:
+    # Convert numeric columns safely
+    df_portfolio["Units"] = pd.to_numeric(df_portfolio["Units"], errors='coerce').fillna(0)
+    df_portfolio["Total_Cost"] = pd.to_numeric(df_portfolio["Total_Cost"], errors='coerce').fillna(0)
+    df_portfolio["WACC"] = pd.to_numeric(df_portfolio["WACC"], errors='coerce').fillna(0)
 
 # --- SIDEBAR ---
 st.sidebar.title("☁️ NEPSE Cloud")
@@ -118,7 +119,7 @@ if menu == "Dashboard":
             cost = row["Total_Cost"]
             
             ltp = fetch_live_price(sym)
-            if ltp == 0: ltp = row["WACC"] # Fallback if offline
+            if ltp == 0: ltp = row["WACC"] # Fallback
             
             curr_val = units * ltp
             _, net_pl, pl_pct, _ = calculate_metrics(units, cost, ltp)
@@ -171,6 +172,10 @@ elif menu == "Add Trade":
         note = c2.text_input("Note")
         
         if st.form_submit_button("Add to Cloud Portfolio"):
+            if portfolio_worksheet is None:
+                st.error("Error: Could not connect to Google Sheet.")
+                st.stop()
+
             # Calculate Costs
             raw_cost = units * price
             comm = get_broker_commission(raw_cost)
@@ -178,37 +183,34 @@ elif menu == "Add Trade":
             total_buy_cost = raw_cost + fees
             
             # Check if stock exists
-            existing_idx = df_portfolio.index[df_portfolio['Symbol'] == sym].tolist()
+            # We refresh data just in case
+            df_curr, ws = get_google_sheet_data("Portfolio")
+            existing_rows = df_curr[df_curr['Symbol'] == sym]
             
-            if existing_idx:
-                # Average Out
-                idx = existing_idx[0]
-                old_units = df_portfolio.at[idx, 'Units']
-                old_cost = df_portfolio.at[idx, 'Total_Cost']
+            if not existing_rows.empty:
+                # Average Out logic
+                idx = existing_rows.index[0]
+                row_num = idx + 2 
+                
+                old_units = float(existing_rows.iloc[0]['Units'])
+                old_cost = float(existing_rows.iloc[0]['Total_Cost'])
                 
                 new_units = old_units + units
                 new_cost = old_cost + total_buy_cost
                 new_wacc = new_cost / new_units
                 
-                df_portfolio.at[idx, 'Units'] = new_units
-                df_portfolio.at[idx, 'Total_Cost'] = new_cost
-                df_portfolio.at[idx, 'WACC'] = new_wacc
+                # Update specific cells
+                ws.update_cell(row_num, 2, new_units) # Col 2 = Units
+                ws.update_cell(row_num, 3, new_cost)  # Col 3 = Total Cost
+                ws.update_cell(row_num, 4, new_wacc)  # Col 4 = WACC
                 st.success(f"Averaged {sym}! New WACC: {new_wacc:.2f}")
             else:
-                # New Entry
-                new_row = pd.DataFrame([{
-                    "Symbol": sym,
-                    "Units": units,
-                    "Total_Cost": total_buy_cost,
-                    "WACC": total_buy_cost / units,
-                    "Notes": note
-                }])
-                df_portfolio = pd.concat([df_portfolio, new_row], ignore_index=True)
+                # Append Row
+                row_data = [sym, units, total_buy_cost, total_buy_cost / units, note]
+                ws.append_row(row_data)
                 st.success(f"Added {sym} to Portfolio!")
             
-            # PUSH TO GOOGLE SHEETS
-            conn.update(worksheet="Portfolio", data=df_portfolio)
-            st.cache_data.clear() # Force refresh
+            st.cache_data.clear()
 
 # ==========================================
 # PAGE: SELL STOCK
@@ -216,55 +218,53 @@ elif menu == "Add Trade":
 elif menu == "Sell Stock":
     st.title("💰 Sell Stock")
     
-    stock_list = df_portfolio['Symbol'].tolist()
-    selected = st.selectbox("Select Stock", stock_list)
-    
-    if selected:
-        row = df_portfolio[df_portfolio['Symbol'] == selected].iloc[0]
-        avail = row['Units']
-        wacc = row['WACC']
+    if df_portfolio.empty:
+        st.warning("No stocks to sell.")
+    else:
+        stock_list = df_portfolio['Symbol'].tolist()
+        selected = st.selectbox("Select Stock", stock_list)
         
-        st.info(f"Available: {avail} units | WACC: Rs. {wacc:.2f}")
-        
-        with st.form("sell_form"):
-            u_sell = st.number_input("Units to Sell", 1, int(avail))
-            p_sell = st.number_input("Selling Price", 1.0)
-            is_long = st.checkbox("Long Term (>1 yr)?")
-            remark = st.text_input("Remark")
+        if selected:
+            row = df_portfolio[df_portfolio['Symbol'] == selected].iloc[0]
+            avail = float(row['Units'])
+            wacc = float(row['WACC'])
             
-            if st.form_submit_button("Confirm Sell"):
-                # Calc P/L
-                cost_portion = u_sell * wacc
-                _, net_pl, _, _ = calculate_metrics(u_sell, cost_portion, p_sell, is_long)
+            st.info(f"Available: {avail} units | WACC: Rs. {wacc:.2f}")
+            
+            with st.form("sell_form"):
+                u_sell = st.number_input("Units to Sell", 1, int(avail))
+                p_sell = st.number_input("Selling Price", 1.0)
+                is_long = st.checkbox("Long Term (>1 yr)?")
+                remark = st.text_input("Remark")
                 
-                # 1. Update Portfolio
-                idx = df_portfolio.index[df_portfolio['Symbol'] == selected][0]
-                rem_units = avail - u_sell
-                
-                if rem_units == 0:
-                    df_portfolio = df_portfolio.drop(idx)
-                else:
-                    df_portfolio.at[idx, 'Units'] = rem_units
-                    df_portfolio.at[idx, 'Total_Cost'] -= cost_portion
-                
-                # 2. Add to History
-                new_sale = pd.DataFrame([{
-                    "Date": str(datetime.now().date()),
-                    "Symbol": selected,
-                    "Units": u_sell,
-                    "Sell_Price": p_sell,
-                    "Net_PL": net_pl,
-                    "Remarks": remark
-                }])
-                df_sales = pd.concat([df_sales, new_sale], ignore_index=True)
-                
-                # PUSH BOTH TO GOOGLE SHEETS
-                conn.update(worksheet="Portfolio", data=df_portfolio)
-                conn.update(worksheet="Sales", data=df_sales)
-                
-                st.success(f"Sold! Net P/L: Rs. {net_pl:.2f}")
-                st.balloons()
-                st.cache_data.clear()
+                if st.form_submit_button("Confirm Sell"):
+                    # Calc P/L
+                    cost_portion = u_sell * wacc
+                    _, net_pl, _, _ = calculate_metrics(u_sell, cost_portion, p_sell, is_long)
+                    
+                    # Locate Row
+                    idx = df_portfolio.index[df_portfolio['Symbol'] == selected][0]
+                    row_num = idx + 2
+                    
+                    rem_units = avail - u_sell
+                    
+                    if rem_units == 0:
+                        # Delete Row
+                        portfolio_worksheet.delete_rows(row_num)
+                    else:
+                        # Update Row
+                        portfolio_worksheet.update_cell(row_num, 2, rem_units)
+                        # We reduce total cost proportionally
+                        new_total_cost = float(row['Total_Cost']) - cost_portion
+                        portfolio_worksheet.update_cell(row_num, 3, new_total_cost)
+                    
+                    # Add to Sales History
+                    sale_row = [str(datetime.now().date()), selected, u_sell, p_sell, net_pl, remark]
+                    sales_worksheet.append_row(sale_row)
+                    
+                    st.success(f"Sold! Net P/L: Rs. {net_pl:.2f}")
+                    st.balloons()
+                    st.cache_data.clear()
 
 # ==========================================
 # PAGE: HISTORY
