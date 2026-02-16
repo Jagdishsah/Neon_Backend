@@ -527,32 +527,54 @@ elif menu == "Sell Stock":
                 st.balloons()
 
 # ================= HISTORY TAB (NEW) =================
+# ================= HISTORY (INTELLIGENT) =================
 elif menu == "History":
-    st.title("📜 Transaction History")
+    st.title("📜 Trade Intelligence")
     hist = get_data("history.csv")
     
     if hist.empty:
-        st.info("No transaction history found.")    
+        st.info("No transaction history found.")
     else:
-        # Metrics
-        total_profit = hist["Net_PL"].sum()
-        total_sales_val = (hist["Units"] * hist["Sell_Price"]).sum()
+        # --- INTELLIGENCE ENGINE ---
+        total_trades = len(hist)
+        wins = hist[hist["Net_PL"] > 0]
+        losses = hist[hist["Net_PL"] <= 0]
         
-        c1, c2 = st.columns(2)
-        c1.metric("Total Realized Profit", f"Rs {total_profit:,.2f}")
-        c2.metric("Total Sales Volume", f"Rs {total_sales_val:,.0f}")
+        win_rate = (len(wins) / total_trades) * 100
+        total_profit = wins["Net_PL"].sum()
+        total_loss = abs(losses["Net_PL"].sum())
         
-        # Ensure compatibility with old data that didn't have Buy_Price
-        if "Buy_Price" not in hist.columns:
-            hist["Buy_Price"] = 0.0
+        # Profit Factor (Avoid division by zero)
+        profit_factor = total_profit / total_loss if total_loss > 0 else total_profit
+        
+        best_trade = hist.loc[hist["Net_PL"].idxmax()] if not hist.empty else None
+        worst_trade = hist.loc[hist["Net_PL"].idxmin()] if not hist.empty else None
 
-        # Updated Table with Buy Price
+        # --- KPI CARDS ---
+        k1, k2, k3, k4 = st.columns(4)
+        k1.metric("Win Rate", f"{win_rate:.1f}%", help="% of trades that were profitable")
+        k2.metric("Profit Factor", f"{profit_factor:.2f}", help="Gross Profit / Gross Loss ( > 1.5 is Good)")
+        k3.metric("Avg Profit/Trade", f"Rs {hist['Net_PL'].mean():.0f}")
+        k4.metric("Net Realized P/L", f"Rs {hist['Net_PL'].sum():,.2f}", delta_color="normal")
+        
+        st.markdown("---")
+        
+        # --- HALL OF FAME ---
+        c1, c2 = st.columns(2)
+        with c1:
+            st.success(f"🏆 **Best Trade:** {best_trade['Symbol']} (+Rs {best_trade['Net_PL']:,.0f})")
+        with c2:
+            st.error(f"💀 **Worst Trade:** {worst_trade['Symbol']} ({worst_trade['Net_PL']:,.0f})")
+
+        # --- DATA TABLE ---
+        st.markdown("### Transaction Log")
+        # Ensure compatibility
+        if "Buy_Price" not in hist.columns: hist["Buy_Price"] = 0.0
+            
         st.dataframe(
             hist.style.format({
-                "Buy_Price": "{:,.2f}", 
-                "Sell_Price": "{:,.2f}", 
-                "Net_PL": "{:,.2f}"
-            }),
+                "Buy_Price": "{:,.2f}", "Sell_Price": "{:,.2f}", "Net_PL": "{:,.2f}"
+            }).background_gradient(subset=["Net_PL"], cmap="RdYlGn", vmin=-5000, vmax=5000),
             use_container_width=True, hide_index=True
         )
 # ================= WACC PROJECTION (NEW) =================
@@ -817,6 +839,7 @@ elif menu == "Manage Data":
                 save_data(fname, pd.DataFrame()) # Save empty
                 st.error(f"{del_opt} has been wiped.")
                 st.cache_data.clear()
+
 
 
 
