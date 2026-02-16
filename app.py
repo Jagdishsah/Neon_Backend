@@ -49,7 +49,8 @@ def get_data(filename):
         # Define schemas
         if "portfolio" in filename: cols = ["Symbol", "Sector", "Units", "Total_Cost", "WACC", "Stop_Loss", "Notes"]
         elif "watchlist" in filename: cols = ["Symbol", "Target", "Remark"]
-        elif "history" in filename: cols = ["Date", "Symbol", "Units", "Sell_Price", "Net_PL", "Reason"]
+            # Update this line inside get_data():
+        elif "history" in filename: cols = ["Date", "Symbol", "Units", "Buy_Price", "Sell_Price", "Net_PL", "Reason"]
         elif "cache" in filename: cols = ["Symbol", "LTP", "Change", "High52", "Low52", "LastUpdated"]
         else: cols = []
         return pd.DataFrame(columns=cols)
@@ -416,10 +417,15 @@ elif menu == "Sell Stock":
                 
                 # Update History
                 hist = get_data("history.csv")
+                # Update History Record creation
                 new_rec = pd.DataFrame([{
                     "Date": datetime.now().strftime("%Y-%m-%d"),
-                    "Symbol": sel_sym, "Units": u_sell, "Sell_Price": p_sell,
-                    "Net_PL": net_pl, "Reason": reason
+                    "Symbol": sel_sym, 
+                    "Units": u_sell, 
+                    "Buy_Price": row['WACC'],  # <--- NEW FIELD ADDED
+                    "Sell_Price": p_sell,
+                    "Net_PL": net_pl, 
+                    "Reason": reason
                 }])
                 hist = pd.concat([hist, new_rec], ignore_index=True)
                 
@@ -435,7 +441,11 @@ elif menu == "History":
     
     if hist.empty:
         st.info("No transaction history found.")
-    else:
+
+    
+
+    
+   else:
         # Metrics
         total_profit = hist["Net_PL"].sum()
         total_sales_val = (hist["Units"] * hist["Sell_Price"]).sum()
@@ -444,11 +454,19 @@ elif menu == "History":
         c1.metric("Total Realized Profit", f"Rs {total_profit:,.2f}")
         c2.metric("Total Sales Volume", f"Rs {total_sales_val:,.0f}")
         
+        # Ensure compatibility with old data that didn't have Buy_Price
+        if "Buy_Price" not in hist.columns:
+            hist["Buy_Price"] = 0.0
+
+        # Updated Table with Buy Price
         st.dataframe(
-            hist.style.format({"Sell_Price": "{:,.2f}", "Net_PL": "{:,.2f}"}),
+            hist.style.format({
+                "Buy_Price": "{:,.2f}", 
+                "Sell_Price": "{:,.2f}", 
+                "Net_PL": "{:,.2f}"
+            }),
             use_container_width=True, hide_index=True
         )
-
 # ================= WACC PROJECTION (NEW) =================
 elif menu == "WACC Projection":
     st.title("🧮 WACC Projector")
@@ -474,22 +492,32 @@ elif menu == "WACC Projection":
             st.markdown("#### Buy Scenario")
             new_u = st.number_input("New Units", 1)
             new_p = st.number_input("New Price", 1.0)
-            
+
         if st.button("Calculate Projection"):
             # New Cost
             raw = new_u * new_p
             comm = get_broker_commission(raw)
             add_cost = raw + comm + DP_CHARGE + (raw * SEBON_FEE)
             
-            # Combined
+            # Combined Data
             final_u = row['Units'] + new_u
             final_cost = row['Total_Cost'] + add_cost
             final_wacc = final_cost / final_u
             
+            # Calculate New Break Even (Approximate: Cost + 0.6% Overhead + DP)
+            overhead = final_cost * 0.006 + 25
+            new_be = (final_cost + overhead) / final_u
+            
             st.markdown("---")
-            res_c1, res_c2 = st.columns(2)
-            res_c1.metric("New WACC", f"Rs {final_wacc:.2f}", delta=f"{row['WACC'] - final_wacc:.2f} Drop")
-            res_c2.metric("Extra Capital Needed", f"Rs {add_cost:,.2f}")
+            res_c1, res_c2, res_c3 = st.columns(3)
+            
+            res_c1.metric("New WACC", f"Rs {final_wacc:.2f}", 
+                          delta=f"{row['WACC'] - final_wacc:.2f} Drop")
+            
+            res_c2.metric("New Break Even", f"Rs {new_be:.2f}")
+            
+            res_c3.metric("Extra Capital Needed", f"Rs {add_cost:,.2f}")
+        
 
 # ================= WHAT IF =================
 elif menu == "What If Analysis":
@@ -558,3 +586,4 @@ elif menu == "Manage Data":
                 save_data(fname, pd.DataFrame()) # Save empty
                 st.error(f"{del_opt} has been wiped.")
                 st.cache_data.clear()
+
