@@ -1,17 +1,12 @@
 import streamlit as st
+from streamlit_gsheets import GSheetsConnection
 import pandas as pd
-import json
-import os
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
 
-# --- CONFIGURATION & SETUP ---
-st.set_page_config(page_title="NEPSE Terminal", page_icon="📈", layout="wide")
-
-# File Paths
-PORTFOLIO_FILE = "portfolio.json"
-HISTORY_FILE = "sales_history.json"
+# --- CONFIGURATION ---
+st.set_page_config(page_title="NEPSE Cloud Terminal", page_icon="☁️", layout="wide")
 
 # Fees
 SEBON_FEE = 0.015 / 100
@@ -19,21 +14,11 @@ DP_CHARGE = 25
 CGT_SHORT = 7.5 / 100
 CGT_LONG = 5.0 / 100
 
-# --- DATA MANAGER ---
-def load_data(filename, default=None):
-    if not os.path.exists(filename):
-        return default if default is not None else {}
-    try:
-        with open(filename, 'r') as f:
-            return json.load(f)
-    except:
-        return default if default is not None else {}
+# --- GOOGLE SHEETS CONNECTION ---
+# This looks for secrets.toml automatically
+conn = st.connection("gsheets", type=GSheetsConnection)
 
-def save_data(filename, data):
-    with open(filename, 'w') as f:
-        json.dump(data, f, indent=4)
-
-# --- CALCULATION ENGINE ---
+# --- HELPER FUNCTIONS ---
 def get_broker_commission(amount):
     if amount <= 50000: rate = 0.36 / 100
     elif amount <= 500000: rate = 0.33 / 100
@@ -42,259 +27,188 @@ def get_broker_commission(amount):
     else: rate = 0.24 / 100
     return max(10, amount * rate)
 
-def calculate_metrics(units, total_buy_cost, current_price, is_long_term=False):
-    if units <= 0: return [0, 0, 0, 0, 0]
-    
-    sell_amount = units * current_price
-    commission = get_broker_commission(sell_amount)
-    deductions = commission + (sell_amount * SEBON_FEE) + DP_CHARGE
-    net_receivable = sell_amount - deductions
-    
-    gross_pl = net_receivable - total_buy_cost
-    tax_rate = CGT_LONG if is_long_term else CGT_SHORT
-    
-    tax_amount = gross_pl * tax_rate if gross_pl > 0 else 0
-    net_pl = gross_pl - tax_amount
-    
-    pl_percent = (net_pl / total_buy_cost) * 100 if total_buy_cost > 0 else 0
-    est_rate = 0.0036 + SEBON_FEE
-    be_price = (total_buy_cost + DP_CHARGE) / (units * (1 - est_rate))
-    
-    return net_receivable, net_pl, pl_percent, be_price, tax_amount
-
-# --- SCRAPING (Cached for Speed) ---
-@st.cache_data(ttl=60)  # Cache data for 60 seconds to save RAM/Internet
+@st.cache_data(ttl=60)
 def fetch_live_price(symbol):
     try:
         url = f"https://merolagani.com/CompanyDetail.aspx?symbol={symbol}"
         headers = {'User-Agent': 'Mozilla/5.0'}
         response = requests.get(url, headers=headers, timeout=5)
         if response.status_code != 200: return 0.0
-        
         soup = BeautifulSoup(response.text, 'html.parser')
         price_tag = soup.select_one("#ctl00_ContentPlaceHolder1_CompanyDetail1_lblMarketPrice")
-        if not price_tag:
-             # Backup selector
-             label = soup.find('th', string=lambda t: t and "Market Price" in t)
-             if label: price_tag = label.find_next('td')
-
         if price_tag:
             return float(price_tag.text.strip().replace(",", ""))
     except:
         pass
     return 0.0
 
-# --- SIDEBAR NAVIGATION ---
-st.sidebar.title("🐺 NEPSE Terminal")
-menu = st.sidebar.radio("Go to", ["Dashboard", "Portfolio", "WACC Calculator", "Add Trade", "Sell Stock", "History"])
+def calculate_metrics(units, total_buy_cost, current_price, is_long_term=False):
+    if units <= 0: return 0, 0, 0, 0, 0
+    sell_amount = units * current_price
+    commission = get_broker_commission(sell_amount)
+    deductions = commission + (sell_amount * SEBON_FEE) + DP_CHARGE
+    net_receivable = sell_amount - deductions
+    gross_pl = net_receivable - total_buy_cost
+    tax_rate = CGT_LONG if is_long_term else CGT_SHORT
+    tax_amount = gross_pl * tax_rate if gross_pl > 0 else 0
+    net_pl = gross_pl - tax_amount
+    pl_percent = (net_pl / total_buy_cost) * 100 if total_buy_cost > 0 else 0
+    return net_receivable, net_pl, pl_percent, tax_amount
 
 # --- LOAD DATA ---
-portfolio = load_data(PORTFOLIO_FILE, {})
-history = load_data(HISTORY_FILE, [])
+def load_data():
+    # Load Portfolio
+    try:
+        df_p = conn.read(worksheet="Portfolio", ttl=0)
+        # Ensure columns exist and types are correct
+        if df_p.empty:
+            df_p = pd.DataFrame(columns=["Symbol", "Units", "Total_Cost", "WACC", "Notes"])
+        else:
+            df_p["Units"] = pd.to_numeric(df_p["Units"], errors='coerce').fillna(0)
+            df_p["Total_Cost"] = pd.to_numeric(df_p["Total_Cost"], errors='coerce').fillna(0)
+            df_p["WACC"] = pd.to_numeric(df_p["WACC"], errors='coerce').fillna(0)
+    except:
+        df_p = pd.DataFrame(columns=["Symbol", "Units", "Total_Cost", "WACC", "Notes"])
+
+    # Load Sales History
+    try:
+        df_s = conn.read(worksheet="Sales", ttl=0)
+        if df_s.empty:
+            df_s = pd.DataFrame(columns=["Date", "Symbol", "Units", "Sell_Price", "Net_PL", "Remarks"])
+    except:
+        df_s = pd.DataFrame(columns=["Date", "Symbol", "Units", "Sell_Price", "Net_PL", "Remarks"])
+        
+    return df_p, df_s
+
+df_portfolio, df_sales = load_data()
+
+# --- SIDEBAR ---
+st.sidebar.title("☁️ NEPSE Cloud")
+menu = st.sidebar.radio("Menu", ["Dashboard", "Portfolio", "Add Trade", "Sell Stock", "History"])
+
+if st.sidebar.button("🔄 Force Sync"):
+    st.cache_data.clear()
+    st.rerun()
 
 # ==========================================
 # PAGE: DASHBOARD
 # ==========================================
 if menu == "Dashboard":
-    st.title("📊 Market Dashboard")
+    st.title("📊 Cloud Dashboard")
     
-    if st.button("🔄 Refresh Prices"):
-        st.cache_data.clear()
-        st.rerun()
+    if df_portfolio.empty:
+        st.info("Portfolio is empty. Go to 'Add Trade' to start.")
+    else:
+        # Progress Bar
+        total_stocks = len(df_portfolio)
+        progress_text = "Fetching live prices..."
+        my_bar = st.progress(0, text=progress_text)
         
-    # Calculate Totals
-    total_invested = 0
-    current_value = 0
-    total_pl = 0
-    portfolio_list = []
-    
-    # Progress bar for loading
-    progress_text = "Fetching live prices..."
-    my_bar = st.progress(0, text=progress_text)
-    total_stocks = len(portfolio)
-    idx = 0
-
-    for sym, data in portfolio.items():
-        # Update progress
-        idx += 1
-        if total_stocks > 0: my_bar.progress(idx / total_stocks, text=f"Fetching {sym}...")
-
-        ltp = fetch_live_price(sym)
-        if ltp == 0: ltp = data.get('cached_ltp', 0) # Fallback
+        total_invested = 0
+        current_value = 0
+        total_pl = 0
         
-        units = data['units']
-        cost = data['total_cost']
+        dashboard_data = []
         
-        if units > 0:
-            val = units * ltp
-            metrics = calculate_metrics(units, cost, ltp)
-            net_pl = metrics[1]
+        for index, row in df_portfolio.iterrows():
+            my_bar.progress((index + 1) / total_stocks)
+            
+            sym = row["Symbol"]
+            units = row["Units"]
+            cost = row["Total_Cost"]
+            
+            ltp = fetch_live_price(sym)
+            if ltp == 0: ltp = row["WACC"] # Fallback if offline
+            
+            curr_val = units * ltp
+            _, net_pl, pl_pct, _ = calculate_metrics(units, cost, ltp)
             
             total_invested += cost
-            current_value += val
+            current_value += curr_val
             total_pl += net_pl
             
-            portfolio_list.append({
+            dashboard_data.append({
                 "Symbol": sym,
                 "LTP": ltp,
                 "Invested": cost,
-                "Current Val": val,
+                "Value": curr_val,
                 "Net P/L": net_pl,
-                "P/L %": metrics[2]
+                "Change": pl_pct
             })
-    
-    my_bar.empty() # Clear progress bar
-
-    # Top Metrics
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Total Invested", f"Rs. {total_invested:,.0f}")
-    col2.metric("Current Value", f"Rs. {current_value:,.0f}", delta=f"{current_value-total_invested:,.0f}")
-    col3.metric("Total Net P/L", f"Rs. {total_pl:,.0f}", delta_color="normal")
-
-    st.markdown("### 📈 Details")
-    if portfolio_list:
-        df = pd.DataFrame(portfolio_list)
-        st.dataframe(df.style.format({
-            "LTP": "{:.1f}", 
-            "Invested": "{:,.0f}", 
-            "Current Val": "{:,.0f}",
-            "Net P/L": "{:,.0f}",
-            "P/L %": "{:.2f}%"
-        }), width="stretch")
-    else:
-        st.info("Portfolio is empty.")
+            
+        my_bar.empty()
+        
+        # Metrics
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Total Invested", f"Rs. {total_invested:,.0f}")
+        col2.metric("Current Value", f"Rs. {current_value:,.0f}", delta=f"{current_value-total_invested:,.0f}")
+        col3.metric("Total Net P/L", f"Rs. {total_pl:,.0f}", delta_color="normal")
+        
+        # Table
+        st.dataframe(pd.DataFrame(dashboard_data).style.format({
+            "LTP": "{:.1f}", "Invested": "{:,.0f}", "Value": "{:,.0f}", 
+            "Net P/L": "{:,.0f}", "Change": "{:.2f}%"
+        }), width=1000)
 
 # ==========================================
 # PAGE: PORTFOLIO
 # ==========================================
 elif menu == "Portfolio":
-    st.title("💼 Portfolio Holdings")
-    
-    if not portfolio:
-        st.warning("No stocks found.")
-    else:
-        rows = []
-        for sym, data in portfolio.items():
-            units = data['units']
-            cost = data['total_cost']
-            wacc = cost / units if units else 0
-            ltp = fetch_live_price(sym)
-            if ltp == 0: ltp = data.get('cached_ltp', 0)
-            
-            metrics = calculate_metrics(units, cost, ltp)
-            
-            rows.append({
-                "Symbol": sym,
-                "Units": units,
-                "WACC": wacc,
-                "LTP": ltp,
-                "Break Even": metrics[3],
-                "Total Cost": cost,
-                "Current Val": units * ltp,
-                "Profit/Loss": metrics[1],
-                "%": metrics[2],
-                "Notes": data.get('note', '-')
-            })
-            
-        df = pd.DataFrame(rows)
-        
-        def color_pl(val):
-            try:
-                v = float(str(val).replace(',','').replace('%',''))
-                color = '#d4edda' if v > 0 else '#f8d7da'
-                return f'background-color: {color}'
-            except: return ''
-
-        st.dataframe(
-            df.style.format({
-                "WACC": "{:.2f}", "LTP": "{:.1f}", "Break Even": "{:.2f}",
-                "Total Cost": "{:,.0f}", "Current Val": "{:,.0f}", 
-                "Profit/Loss": "{:,.0f}", "%": "{:.2f}%"
-            }),
-            width="stretch",
-            height=500
-        )
-
-# ==========================================
-# PAGE: WACC CALCULATOR
-# ==========================================
-elif menu == "WACC Calculator":
-    st.title("🧮 Project WACC")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        stock_list = list(portfolio.keys())
-        selected_stock = st.selectbox("Select Stock", stock_list)
-        
-        if selected_stock:
-            curr = portfolio[selected_stock]
-            curr_units = curr['units']
-            curr_cost = curr['total_cost']
-            curr_wacc = curr_cost / curr_units if curr_units else 0
-            
-            st.info(f"**Current:** {curr_units} units @ Rs. {curr_wacc:.2f}")
-            
-            new_units = st.number_input("Units to Buy", min_value=1, value=10)
-            new_price = st.number_input("Price per Unit", min_value=1.0, value=float(curr.get('cached_ltp', 0)))
-    
-    with col2:
-        st.subheader("Projection")
-        if selected_stock:
-            new_cost_raw = new_units * new_price
-            fees = get_broker_commission(new_cost_raw) + (new_cost_raw * SEBON_FEE) + DP_CHARGE
-            total_new_block = new_cost_raw + fees
-            
-            final_units = curr_units + new_units
-            final_cost = curr_cost + total_new_block
-            final_wacc = final_cost / final_units
-            
-            est_rate = 0.0036 + SEBON_FEE
-            new_be = (final_cost + DP_CHARGE) / (final_units * (1 - est_rate))
-            
-            diff = curr_wacc - final_wacc
-            
-            st.metric("New WACC", f"Rs. {final_wacc:.2f}", delta=f"{diff:.2f} (Improvement)" if diff > 0 else f"{diff:.2f}")
-            st.write(f"**New Break Even:** Rs. {new_be:.2f}")
-            st.write(f"**Total Investment Required:** Rs. {total_new_block:,.2f}")
+    st.title("💼 Live Holdings")
+    st.dataframe(df_portfolio, use_container_width=True)
 
 # ==========================================
 # PAGE: ADD TRADE
 # ==========================================
 elif menu == "Add Trade":
-    st.title("➕ Add / Average Stock")
+    st.title("➕ Buy / Average Stock")
     
-    with st.form("add_stock_form"):
-        col1, col2 = st.columns(2)
-        sym = col1.text_input("Symbol").upper()
-        units = col2.number_input("Units", min_value=1, step=1)
-        price = col1.number_input("Price", min_value=1.0, step=0.1)
-        date = col2.date_input("Buy Date", datetime.now())
-        note = st.text_input("Note / Remark")
+    with st.form("buy_form"):
+        c1, c2 = st.columns(2)
+        sym = c1.text_input("Symbol").upper()
+        units = c2.number_input("Units", min_value=1)
+        price = c1.number_input("Price per Unit", min_value=1.0)
+        note = c2.text_input("Note")
         
-        submitted = st.form_submit_button("Add to Portfolio")
-        
-        if submitted and sym:
-            cost = units * price
-            comm = get_broker_commission(cost)
-            fees = comm + (cost * SEBON_FEE) + DP_CHARGE
-            total = cost + fees
+        if st.form_submit_button("Add to Cloud Portfolio"):
+            # Calculate Costs
+            raw_cost = units * price
+            comm = get_broker_commission(raw_cost)
+            fees = comm + (raw_cost * SEBON_FEE) + DP_CHARGE
+            total_buy_cost = raw_cost + fees
             
-            if sym in portfolio:
-                portfolio[sym]['units'] += units
-                portfolio[sym]['total_cost'] += total
-                portfolio[sym]['note'] = note
-                portfolio[sym]['buy_date'] += f", {date}"
-                st.success(f"Averaged {sym}! New Total Cost: {portfolio[sym]['total_cost']:.2f}")
+            # Check if stock exists
+            existing_idx = df_portfolio.index[df_portfolio['Symbol'] == sym].tolist()
+            
+            if existing_idx:
+                # Average Out
+                idx = existing_idx[0]
+                old_units = df_portfolio.at[idx, 'Units']
+                old_cost = df_portfolio.at[idx, 'Total_Cost']
+                
+                new_units = old_units + units
+                new_cost = old_cost + total_buy_cost
+                new_wacc = new_cost / new_units
+                
+                df_portfolio.at[idx, 'Units'] = new_units
+                df_portfolio.at[idx, 'Total_Cost'] = new_cost
+                df_portfolio.at[idx, 'WACC'] = new_wacc
+                st.success(f"Averaged {sym}! New WACC: {new_wacc:.2f}")
             else:
-                portfolio[sym] = {
-                    'units': units, 'total_cost': total, 'sector': 'Unknown',
-                    'stop_loss': 0, 'note': note, 'buy_date': str(date),
-                    'cached_ltp': price # Init with buy price
-                }
+                # New Entry
+                new_row = pd.DataFrame([{
+                    "Symbol": sym,
+                    "Units": units,
+                    "Total_Cost": total_buy_cost,
+                    "WACC": total_buy_cost / units,
+                    "Notes": note
+                }])
+                df_portfolio = pd.concat([df_portfolio, new_row], ignore_index=True)
                 st.success(f"Added {sym} to Portfolio!")
             
-            save_data(PORTFOLIO_FILE, portfolio)
+            # PUSH TO GOOGLE SHEETS
+            conn.update(worksheet="Portfolio", data=df_portfolio)
+            st.cache_data.clear() # Force refresh
 
 # ==========================================
 # PAGE: SELL STOCK
@@ -302,74 +216,59 @@ elif menu == "Add Trade":
 elif menu == "Sell Stock":
     st.title("💰 Sell Stock")
     
-    stock_list = list(portfolio.keys())
-    sym = st.selectbox("Select Stock to Sell", stock_list)
+    stock_list = df_portfolio['Symbol'].tolist()
+    selected = st.selectbox("Select Stock", stock_list)
     
-    if sym:
-        curr = portfolio[sym]
-        avail = curr['units']
-        avg_cost = curr['total_cost'] / avail if avail else 0
+    if selected:
+        row = df_portfolio[df_portfolio['Symbol'] == selected].iloc[0]
+        avail = row['Units']
+        wacc = row['WACC']
         
-        st.write(f"Available: **{avail} units** | Avg Cost: **Rs. {avg_cost:.2f}**")
+        st.info(f"Available: {avail} units | WACC: Rs. {wacc:.2f}")
         
         with st.form("sell_form"):
-            col1, col2 = st.columns(2)
-            u_sell = col1.number_input("Units to Sell", min_value=1, max_value=avail)
-            price = col2.number_input("Sell Price", min_value=1.0)
-            is_long = st.checkbox("Held > 1 Year? (5% Tax)")
-            sell_date = st.date_input("Sell Date", datetime.now())
-            remarks = st.text_input("Remarks (Lesson)")
+            u_sell = st.number_input("Units to Sell", 1, int(avail))
+            p_sell = st.number_input("Selling Price", 1.0)
+            is_long = st.checkbox("Long Term (>1 yr)?")
+            remark = st.text_input("Remark")
             
-            confirm = st.form_submit_button("Confirm Sell")
-            
-            if confirm:
-                # Calc
-                cost_share = (curr['total_cost'] / avail) * u_sell
-                metrics = calculate_metrics(u_sell, cost_share, price, is_long_term=is_long)
-                net_receivable, net_pl, _, _, tax_paid = metrics
+            if st.form_submit_button("Confirm Sell"):
+                # Calc P/L
+                cost_portion = u_sell * wacc
+                _, net_pl, _, _ = calculate_metrics(u_sell, cost_portion, p_sell, is_long)
                 
-                # Update History
-                rec = {
-                    'sell_date': str(sell_date),
-                    'symbol': sym,
-                    'units': u_sell,
-                    'sell_price': price,
-                    'net_pl': net_pl,
-                    'tax_paid': tax_paid,
-                    'sell_remark': remarks
-                }
-                history.append(rec)
-                save_data(HISTORY_FILE, history)
-                
-                # Update Portfolio
+                # 1. Update Portfolio
+                idx = df_portfolio.index[df_portfolio['Symbol'] == selected][0]
                 rem_units = avail - u_sell
+                
                 if rem_units == 0:
-                    del portfolio[sym]
+                    df_portfolio = df_portfolio.drop(idx)
                 else:
-                    portfolio[sym]['units'] = rem_units
-                    portfolio[sym]['total_cost'] -= cost_share
+                    df_portfolio.at[idx, 'Units'] = rem_units
+                    df_portfolio.at[idx, 'Total_Cost'] -= cost_portion
                 
-                save_data(PORTFOLIO_FILE, portfolio)
+                # 2. Add to History
+                new_sale = pd.DataFrame([{
+                    "Date": str(datetime.now().date()),
+                    "Symbol": selected,
+                    "Units": u_sell,
+                    "Sell_Price": p_sell,
+                    "Net_PL": net_pl,
+                    "Remarks": remark
+                }])
+                df_sales = pd.concat([df_sales, new_sale], ignore_index=True)
                 
-                st.success(f"SOLD {sym}! Net P/L: Rs. {net_pl:,.2f}")
-                if net_pl > 0: st.balloons()
+                # PUSH BOTH TO GOOGLE SHEETS
+                conn.update(worksheet="Portfolio", data=df_portfolio)
+                conn.update(worksheet="Sales", data=df_sales)
+                
+                st.success(f"Sold! Net P/L: Rs. {net_pl:.2f}")
+                st.balloons()
+                st.cache_data.clear()
 
 # ==========================================
 # PAGE: HISTORY
 # ==========================================
 elif menu == "History":
     st.title("📜 Trade History")
-    
-    if not history:
-        st.info("No sales yet.")
-    else:
-        df_hist = pd.DataFrame(history)
-        
-        total_profit = sum(h['net_pl'] for h in history)
-        total_tax = sum(h.get('tax_paid', 0) for h in history)
-        
-        col1, col2 = st.columns(2)
-        col1.metric("Total Realized Profit", f"Rs. {total_profit:,.2f}")
-        col2.metric("Total Tax Paid", f"Rs. {total_tax:,.2f}")
-        
-        st.dataframe(df_hist, width="stretch")
+    st.dataframe(df_sales, use_container_width=True)
