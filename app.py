@@ -8,10 +8,8 @@ from datetime import datetime
 # --- CONFIGURATION ---
 st.set_page_config(page_title="NEPSE Cloud Terminal", page_icon="☁️", layout="wide")
 
-# 🛑 PASTE YOUR GOOGLE SHEET URL HERE 
-# (Make sure this is YOUR actual sheet link)
-
-SHEET_URL = "https://docs.google.com/spreadsheets/d/1jf810Q3V5XquNE9cI7kjyC6kwxs0dxnw1moNLk1Wtqw/edit" 
+# 🛑 YOUR GOOGLE SHEET URL
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1jf810Q3V5XquNE9cI7kjyC6kwxs0dxnw1moNLk1Wtqw/edit"
 
 # Fees
 SEBON_FEE = 0.015 / 100
@@ -31,6 +29,7 @@ def get_google_sheet_data(worksheet_name):
         data = worksheet.get_all_records()
         return pd.DataFrame(data), worksheet
     except Exception as e:
+        # st.error(f"Connection Error: {e}") # Uncomment for debugging
         return pd.DataFrame(), None
 
 # --- HELPER FUNCTIONS ---
