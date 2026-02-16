@@ -102,6 +102,61 @@ def fetch_live_single(symbol):
     except: pass
     return data
 
+def update_wealth_log(port, cache):
+    """Calculates daily snapshot and saves to wealth.csv"""
+    if port.empty: return
+
+    # Merge to get latest values
+    df = pd.merge(port, cache, on="Symbol", how="left").fillna(0)
+    
+    total_inv = df["Total_Cost"].sum()
+    total_val = 0
+    day_pl = 0
+    
+    for _, row in df.iterrows():
+        ltp = row.get("LTP", 0)
+        if ltp == 0: ltp = row["WACC"]
+        
+        # Calc Value
+        val = row["Units"] * ltp
+        total_val += val
+        
+        # Calc Day Change
+        chg = row.get("Change", 0)
+        day_pl += (row["Units"] * chg)
+
+    total_pl = total_val - total_inv
+    
+    # Get Daily Buy/Sell Volume from History
+    hist = get_data("history.csv")
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    
+    bought_today = 0 # (Logic would need a 'buys.csv' or filtering portfolio notes, simplifying for now)
+    sold_today = 0
+    if not hist.empty and "Date" in hist.columns:
+        todays_sales = hist[hist["Date"] == today_str]
+        sold_today = (todays_sales["Units"] * todays_sales["Sell_Price"]).sum()
+
+    # Create Snapshot
+    new_row = {
+        "Date": today_str,
+        "Total_Investment": round(total_inv, 2),
+        "Current_Value": round(total_val, 2),
+        "Total_PL": round(total_pl, 2),
+        "Day_Change": round(day_pl, 2),
+        "Sold_Volume": round(sold_today, 2)
+    }
+    
+    # Load Existing Log
+    log = get_data("wealth.csv")
+    
+    # Remove existing entry for today (so we don't duplicate if you refresh 10 times)
+    if not log.empty and "Date" in log.columns:
+        log = log[log["Date"] != today_str]
+    
+    log = pd.concat([log, pd.DataFrame([new_row])], ignore_index=True)
+    save_data("wealth.csv", log)
+
 def refresh_market_cache():
     port = get_data("portfolio.csv")
     watch = get_data("watchlist.csv")
@@ -128,7 +183,11 @@ def refresh_market_cache():
     progress.empty()
     new_cache = pd.DataFrame(cache_list)
     save_data("cache.csv", new_cache)
-    st.toast("Market Data Synced!", icon="✅")
+    
+    # --- TRIGGER WEALTH LOG UPDATE ---
+    update_wealth_log(port, new_cache)
+    
+    st.toast("Market Data & Wealth Log Updated!", icon="✅")
     st.cache_data.clear()
 
 # --- CALCULATORS ---
@@ -165,7 +224,7 @@ def calculate_metrics(units, cost, ltp, change=0):
 # --- NAVIGATION ---
 st.sidebar.title("🚀 NEPSE Terminal")
 menu = st.sidebar.radio("Main Menu", 
-    ["Dashboard", "Portfolio", "Watchlist", "Add Trade", "Sell Stock", "History", "WACC Projection", "What If Analysis", "Manage Data"])
+    ["Dashboard", "Portfolio", "Watchlist", "Add Trade", "Sell Stock", "History", "Wealth Graph", "WACC Projection", "What If Analysis", "Reports", "Manage Data"]
 
 if st.sidebar.button("🔄 Refresh Market Data"):
     refresh_market_cache()
@@ -235,13 +294,46 @@ if menu == "Dashboard":
         # 2. Visuals & Alerts
         col_chart, col_alert = st.columns([2, 1])
         
+        # ... inside Dashboard ...
         with col_chart:
-            st.subheader("Sector Allocation")
-            if sector_data:
-                sec_df = pd.DataFrame(list(sector_data.items()), columns=["Sector", "Value"])
-                fig = px.pie(sec_df, values="Value", names="Sector", hole=0.4, color_discrete_sequence=px.colors.sequential.RdBu)
-                fig.update_layout(margin=dict(t=0, b=0, l=0, r=0), height=300)
+            st.subheader("Sector Analysis")
+            
+            # 1. Selector for Chart Type
+            chart_metric = st.selectbox(
+                "View By:", 
+                ["Current Value", "Total Investment", "Profit/Loss", "Quantity"], 
+                index=0,
+                label_visibility="collapsed"
+            )
+            
+            # 2. Map Selector to DataFrame Columns
+            # We need to build a sector_df based on the selection
+            sec_groups = {}
+            
+            for _, row in df.iterrows():
+                sec = row.get("Sector", "Unclassified")
+                ltp = row.get("LTP", 0) if row.get("LTP", 0) > 0 else row["WACC"]
+                
+                val = 0
+                if chart_metric == "Current Value":
+                    val = row["Units"] * ltp
+                elif chart_metric == "Total Investment":
+                    val = row["Total_Cost"]
+                elif chart_metric == "Profit/Loss":
+                    val = (row["Units"] * ltp) - row["Total_Cost"]
+                    if val < 0: val = 0 # Pie charts don't like negative numbers
+                elif chart_metric == "Quantity":
+                    val = row["Units"]
+
+                sec_groups[sec] = sec_groups.get(sec, 0) + val
+
+            # 3. Plot
+            if sec_groups:
+                sec_df = pd.DataFrame(list(sec_groups.items()), columns=["Sector", "Metric"])
+                fig = px.pie(sec_df, values="Metric", names="Sector", hole=0.4)
                 st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("No data for this metric.")
                 
         with col_alert:
             st.subheader("📢 Notifications")
@@ -549,6 +641,149 @@ elif menu == "What If Analysis":
                 st.markdown(f"### 🔴 SL @ {stop_loss}")
                 st.metric("Net Loss", f"Rs {pl:,.0f}")
 
+
+# ================= WEALTH GRAPH =================
+elif menu == "Wealth Graph":
+    st.title("📈 Wealth Growth")
+    
+    log = get_data("wealth.csv")
+    
+    if log.empty:
+        st.info("No wealth history yet. Click 'Refresh Market Data' to create your first snapshot.")
+    else:
+        # Convert Date to datetime for better sorting
+        log["Date"] = pd.to_datetime(log["Date"])
+        log = log.sort_values("Date")
+        
+        # View Selector
+        metric = st.selectbox("Select Metric to View", 
+                             ["Current_Value", "Total_Investment", "Total_PL", "Day_Change", "Sold_Volume"])
+        
+        # Chart
+        st.subheader(f"{metric.replace('_', ' ')} Over Time")
+        
+        # Color logic
+        line_color = "#00FF00" if metric in ["Current_Value", "Total_PL"] else "#00CCFF"
+        
+        fig = px.line(log, x="Date", y=metric, markers=True, title=None)
+        fig.update_traces(line_color=line_color, line_width=3)
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Data Table below
+        with st.expander("View Raw Data Log"):
+            st.dataframe(log.style.format("{:.2f}", subset=log.columns.drop("Date")), use_container_width=True)
+
+# ================= REPORTS =================
+elif menu == "Reports":
+    st.title("🖨️ Report Center")
+    from fpdf import FPDF
+    import base64
+
+    st.write("Generate professional PDF reports of your trading terminal.")
+
+    report_type = st.radio("Select Report Type", ["Full Portfolio Report", "Transaction History", "Combined Record"])
+
+    if st.button("Generate PDF"):
+        # Load Data
+        port = get_data("portfolio.csv")
+        hist = get_data("history.csv")
+        cache = get_data("cache.csv")
+        
+        # Merge Portfolio for latest values
+        if not port.empty and not cache.empty:
+            full_port = pd.merge(port, cache, on="Symbol", how="left").fillna(0)
+        else:
+            full_port = port
+
+        # --- PDF CLASS ---
+        class PDF(FPDF):
+            def header(self):
+                self.set_font('Arial', 'B', 15)
+                self.cell(0, 10, 'NEPSE Professional Terminal - User Report', 0, 1, 'C')
+                self.set_font('Arial', 'I', 10)
+                self.cell(0, 10, f'Generated on: {datetime.now().strftime("%Y-%m-%d %H:%M")}', 0, 1, 'C')
+                self.ln(5)
+
+            def footer(self):
+                self.set_y(-15)
+                self.set_font('Arial', 'I', 8)
+                self.cell(0, 10, f'Page {self.page_no()}', 0, 0, 'C')
+
+        pdf = PDF()
+        pdf.add_page()
+        pdf.set_font("Arial", size=10)
+
+        # --- PORTFOLIO SECTION ---
+        if report_type in ["Full Portfolio Report", "Combined Record"] and not full_port.empty:
+            pdf.set_font("Arial", 'B', 12)
+            pdf.cell(0, 10, "Current Holdings", 0, 1)
+            pdf.set_font("Arial", 'B', 9)
+            
+            # Table Header
+            cols = ["Symbol", "Qty", "WACC", "LTP", "Value", "P/L"]
+            widths = [25, 20, 30, 30, 35, 35]
+            
+            for i, col in enumerate(cols):
+                pdf.cell(widths[i], 10, col, 1, 0, 'C')
+            pdf.ln()
+            
+            # Table Body
+            pdf.set_font("Arial", size=9)
+            total_val = 0
+            total_pl = 0
+            
+            for _, row in full_port.iterrows():
+                ltp = row.get("LTP", 0)
+                if ltp == 0: ltp = row["WACC"]
+                val = row["Units"] * ltp
+                pl = val - row["Total_Cost"]
+                total_val += val
+                total_pl += pl
+                
+                data = [
+                    str(row["Symbol"]), str(int(row["Units"])), 
+                    f"{row['WACC']:.1f}", f"{ltp:.1f}", 
+                    f"{val:,.0f}", f"{pl:,.0f}"
+                ]
+                for i, datum in enumerate(data):
+                    pdf.cell(widths[i], 10, datum, 1, 0, 'C')
+                pdf.ln()
+
+            pdf.ln(5)
+            pdf.set_font("Arial", 'B', 10)
+            pdf.cell(0, 10, f"Total Portfolio Value: Rs {total_val:,.2f}", 0, 1)
+            pdf.cell(0, 10, f"Total Unrealized P/L: Rs {total_pl:,.2f}", 0, 1)
+            pdf.ln(10)
+
+        # --- HISTORY SECTION ---
+        if report_type in ["Transaction History", "Combined Record"] and not hist.empty:
+            pdf.set_font("Arial", 'B', 12)
+            pdf.cell(0, 10, "Sales History", 0, 1)
+            pdf.set_font("Arial", 'B', 9)
+            
+            cols = ["Date", "Symbol", "Qty", "Sell Price", "Net P/L"]
+            widths = [35, 25, 20, 30, 35]
+            
+            for i, col in enumerate(cols):
+                pdf.cell(widths[i], 10, col, 1, 0, 'C')
+            pdf.ln()
+            
+            pdf.set_font("Arial", size=9)
+            for _, row in hist.iterrows():
+                data = [
+                    str(row["Date"]), str(row["Symbol"]), str(int(row["Units"])),
+                    f"{row['Sell_Price']:.1f}", f"{row['Net_PL']:,.1f}"
+                ]
+                for i, datum in enumerate(data):
+                    pdf.cell(widths[i], 10, datum, 1, 0, 'C')
+                pdf.ln()
+
+        # Output
+        pdf_bytes = pdf.output(dest='S').encode('latin-1')
+        b64 = base64.b64encode(pdf_bytes).decode()
+        href = f'<a href="data:application/octet-stream;base64,{b64}" download="NEPSE_Report.pdf" style="text-decoration:none; padding:10px; background-color:#4CAF50; color:white; border-radius:5px;">📥 Click to Download PDF</a>'
+        st.markdown(href, unsafe_allow_html=True)
+
 # ================= MANAGE DATA =================
 elif menu == "Manage Data":
     st.title("🛠 Data Editor")
@@ -582,6 +817,7 @@ elif menu == "Manage Data":
                 save_data(fname, pd.DataFrame()) # Save empty
                 st.error(f"{del_opt} has been wiped.")
                 st.cache_data.clear()
+
 
 
 
