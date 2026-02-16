@@ -1,0 +1,72 @@
+[
+    {
+        "sell_date": "2026-01-04",
+        "buy_date": "Unknown",
+        "symbol": "DHEL",
+        "units": 10,
+        "sell_price": 592.2,
+        "invested": 0,
+        "sold_val": 5509.18,
+        "net_pl": 5509.18,
+        "tax_paid": 365.62,
+        "buy_remark": "-",
+        "sell_remark": "Early Profit",
+        "final_remark": "-"
+    },
+    {
+        "sell_date": "2026-01-04",
+        "buy_date": "Unknown",
+        "symbol": "BANDIPUR",
+        "units": 10,
+        "sell_price": 791.2,
+        "invested": 0,
+        "sold_val": 7343.03,
+        "net_pl": 7343.03,
+        "tax_paid": 514.27,
+        "buy_remark": "-",
+        "sell_remark": "Early Profit",
+        "final_remark": "-"
+    },
+    {
+        "sell_date": "2026-01-29",
+        "buy_date": "2026-01-20",
+        "symbol": "TPC",
+        "units": 10,
+        "sell_price": 386.5,
+        "invested": 3759.96,
+        "sold_val": 3820.59,
+        "net_pl": 60.63000000000011,
+        "tax_paid": 4.91,
+        "buy_remark": "-",
+        "sell_remark": "Quick Flip",
+        "final_remark": "-"
+    },
+    {
+        "sell_date": "2026-02-05",
+        "buy_date": "2026-01-29",
+        "symbol": "KKHC",
+        "units": 20,
+        "sell_price": 248.0,
+        "invested": 5002.995643858903,
+        "sold_val": 4916.4,
+        "net_pl": -86.59564385890371,
+        "tax_paid": 0.0,
+        "buy_remark": "-",
+        "sell_remark": "Exit",
+        "final_remark": "-"
+    },
+    {
+        "sell_date": "2026-02-09",
+        "buy_date": "2026-01-29",
+        "symbol": "NHPC",
+        "units": 10,
+        "sell_price": 221.3,
+        "invested": 2249.127178070548,
+        "sold_val": 2177.67,
+        "net_pl": -71.4571780705478,
+        "tax_paid": 0.0,
+        "buy_remark": "-",
+        "sell_remark": "Partial Sell",
+        "final_remark": "-"
+    }
+]
