@@ -440,11 +440,7 @@ elif menu == "History":
     hist = get_data("history.csv")
     
     if hist.empty:
-        st.info("No transaction history found.")
-
-    
-
-    
+        st.info("No transaction history found.")    
    else:
         # Metrics
         total_profit = hist["Net_PL"].sum()
@@ -586,4 +582,5 @@ elif menu == "Manage Data":
                 save_data(fname, pd.DataFrame()) # Save empty
                 st.error(f"{del_opt} has been wiped.")
                 st.cache_data.clear()
+
 
