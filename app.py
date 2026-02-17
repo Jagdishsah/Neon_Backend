@@ -1311,35 +1311,65 @@ elif menu == "Risk Manager":
 elif menu == "Manage Data":
     st.title("🛠 Data Editor")
     
-    tab1, tab2, tab3 = st.tabs(["Portfolio", "History", "Watchlist"])
+    tab1, tab2, tab3, tab4 = st.tabs(["Portfolio", "History", "Watchlist", "Activity Log"])
     
+    # 1. PORTFOLIO EDITOR
     with tab1:
         port = get_data("portfolio.csv")
-        edit_port = st.data_editor(port, num_rows="dynamic", use_container_width=True)
+        edit_port = st.data_editor(port, num_rows="dynamic", use_container_width=True, key="port_edit")
+        
         c1, c2 = st.columns(2)
-        if c1.button("Save Portfolio"):
+        if c1.button("Save Portfolio Changes"):
+            # Detect Changes
+            if len(edit_port) < len(port):
+                diff = len(port) - len(edit_port)
+                log_activity("SYSTEM", "PORTFOLIO", "DELETE", f"Manually deleted {diff} rows via Data Editor", 0)
+            elif len(edit_port) > len(port):
+                diff = len(edit_port) - len(port)
+                log_activity("SYSTEM", "PORTFOLIO", "ADD", f"Manually added {diff} rows via Data Editor", 0)
+            elif not edit_port.equals(port):
+                log_activity("SYSTEM", "PORTFOLIO", "EDIT", "Manually modified values via Data Editor", 0)
+                
             save_data("portfolio.csv", edit_port)
-            st.success("Saved.")
+            st.success("Portfolio Saved & Logged.")
+            
         if c2.button("Discard Changes", key="d1"): st.rerun()
             
+    # 2. HISTORY EDITOR
     with tab2:
         hist = get_data("history.csv")
-        edit_hist = st.data_editor(hist, num_rows="dynamic", use_container_width=True)
+        edit_hist = st.data_editor(hist, num_rows="dynamic", use_container_width=True, key="hist_edit")
+        
         c3, c4 = st.columns(2)
-        if c3.button("Save History"):
+        if c3.button("Save History Changes"):
+            # Detect Changes
+            if len(edit_hist) < len(hist):
+                diff = len(hist) - len(edit_hist)
+                log_activity("SYSTEM", "HISTORY", "DELETE", f"Manually deleted {diff} rows via Data Editor", 0)
+            elif not edit_hist.equals(hist):
+                log_activity("SYSTEM", "HISTORY", "EDIT", "Manually modified History via Data Editor", 0)
+                
             save_data("history.csv", edit_hist)
-            st.success("Saved.")
+            st.success("History Saved & Logged.")
+            
         if c4.button("Discard Changes", key="d2"): st.rerun()
 
+    # 3. WATCHLIST EDITOR
     with tab3:
-        st.warning("⚠️ DANGER ZONE")
-        del_opt = st.selectbox("Select File to Wipe", ["None", "Portfolio", "History", "Watchlist"])
-        if del_opt != "None":
-            if st.button(f"🔴 CONFIRM DELETE ALL {del_opt.upper()} DATA"):
-                fname = f"{del_opt.lower()}.csv"
-                save_data(fname, pd.DataFrame()) # Save empty
-                st.error(f"{del_opt} has been wiped.")
-                st.cache_data.clear()
+        wl = get_data("watchlist.csv")
+        edit_wl = st.data_editor(wl, num_rows="dynamic", use_container_width=True, key="wl_edit")
+        if st.button("Save Watchlist"):
+            save_data("watchlist.csv", edit_wl)
+            st.success("Watchlist Saved.")
+            
+    # 4. ACTIVITY LOG EDITOR (Manual Fixes)
+    with tab4:
+        st.warning("⚠️ Editing Logs directly is not recommended.")
+        log_df = get_data("activity_log.csv")
+        edit_log = st.data_editor(log_df, num_rows="dynamic", use_container_width=True, key="log_edit")
+        if st.button("Save Log Changes"):
+            save_data("activity_log.csv", edit_log)
+            st.success("Logs Saved.")
 
 
 
