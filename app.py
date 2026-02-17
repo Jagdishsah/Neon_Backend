@@ -606,15 +606,33 @@ elif menu == "Sell Stock":
     if port.empty:
         st.warning("Nothing to sell.")
     else:
-        # Migration check
+        # Check for Buy_Date column compatibility
         if "Buy_Date" not in port.columns:
             port["Buy_Date"] = "Unknown"
 
         sel_sym = st.selectbox("Select Stock", port["Symbol"].unique())
         row = port[port["Symbol"] == sel_sym].iloc[0]
         
+        # Calculate Holding Period for Tax
+        is_long_term = False
+        holding_days = 0
+        tax_rate = 0.075 # Default Short Term
+        
+        try:
+            buy_dt_obj = datetime.strptime(str(row['Buy_Date']), "%Y-%m-%d")
+            # Use Nepal Time for "Today"
+            today_obj = datetime.utcnow() + pd.Timedelta(hours=5, minutes=45)
+            holding_days = (today_obj - buy_dt_obj).days
+            
+            if holding_days > 365:
+                is_long_term = True
+                tax_rate = 0.05 # Long Term
+        except:
+            pass # Keep default if date is invalid/unknown
+
         # Display Info
-        st.info(f"Holding: {row['Units']} units | WACC: {row['WACC']:.2f} | Buy Date: {row['Buy_Date']}")
+        tax_label = "Long Term (5%)" if is_long_term else "Short Term (7.5%)"
+        st.info(f"Holding: {row['Units']} units | WACC: {row['WACC']:.2f} | Buy Date: {row['Buy_Date']} ({holding_days} days - {tax_label})")
         
         with st.form("sell_form"):
             c1, c2 = st.columns(2)
@@ -623,43 +641,59 @@ elif menu == "Sell Stock":
             reason = st.text_input("Reason")
             
             if st.form_submit_button("Confirm Sale"):
-                # 1. Calculate Money Flow
-                cost_portion = (row['Total_Cost'] / row['Units']) * u_sell
+                # 1. Invested Amount (Your Cost)
+                # Formula: Units * WACC (This includes buy commission/fees already)
                 invested_amt = u_sell * row['WACC']
-                received_amt = u_sell * p_sell
                 
-                # 2. Calculate Profit/Loss
-                _, net_pl, _, _ = calculate_metrics(u_sell, invested_amt, p_sell)
+                # 2. Selling Expenses Calculation
+                gross_sell_amt = u_sell * p_sell
+                commission = get_broker_commission(gross_sell_amt)
+                sebon_fee = gross_sell_amt * SEBON_FEE
+                dp_charge = DP_CHARGE
                 
-                # 3. Calculate % Return
-                # Avoid division by zero
+                # Money before Tax
+                receivable_pre_tax = gross_sell_amt - commission - sebon_fee - dp_charge
+                
+                # 3. Tax Calculation
+                profit_pre_tax = receivable_pre_tax - invested_amt
+                cgt_tax = 0
+                if profit_pre_tax > 0:
+                    cgt_tax = profit_pre_tax * tax_rate
+                
+                # 4. Final Received Amount (Cash in Hand)
+                received_amt = receivable_pre_tax - cgt_tax
+                
+                # 5. Net Profit/Loss
+                net_pl = received_amt - invested_amt
                 pl_pct = (net_pl / invested_amt * 100) if invested_amt > 0 else 0
                 
-                # 4. Update Portfolio
+                # --- UPDATE DATABASE ---
+                
+                # Update Portfolio
+                cost_portion_to_remove = (row['Total_Cost'] / row['Units']) * u_sell
+                
                 if u_sell == row['Units']:
                     port = port[port["Symbol"] != sel_sym]
                 else:
                     idx = port[port["Symbol"] == sel_sym].index[0]
                     port.at[idx, "Units"] -= u_sell
-                    port.at[idx, "Total_Cost"] -= cost_portion
+                    port.at[idx, "Total_Cost"] -= cost_portion_to_remove
                 
-                # 5. Update History
+                # Update History
                 hist = get_data("history.csv")
-                
-                # Timezone adjustment (Nepal)
                 sell_date_str = (datetime.utcnow() + pd.Timedelta(hours=5, minutes=45)).strftime("%Y-%m-%d")
                 
                 new_rec = pd.DataFrame([{
-                    "Date": sell_date_str,          # Sell Date
-                    "Buy_Date": row['Buy_Date'],    # <--- Fetched from Portfolio
+                    "Date": sell_date_str,
+                    "Buy_Date": row['Buy_Date'],
                     "Symbol": sel_sym, 
                     "Units": u_sell, 
                     "Buy_Price": row['WACC'], 
                     "Sell_Price": p_sell,
                     "Invested_Amount": round(invested_amt, 2),
-                    "Received_Amount": round(received_amt, 2),
+                    "Received_Amount": round(received_amt, 2), # Now Net Receivable
                     "Net_PL": round(net_pl, 2), 
-                    "PL_Pct": round(pl_pct, 2),     # <--- Stored %
+                    "PL_Pct": round(pl_pct, 2),
                     "Reason": reason
                 }])
                 
@@ -667,7 +701,16 @@ elif menu == "Sell Stock":
                 
                 save_data("portfolio.csv", port)
                 save_data("history.csv", hist)
-                st.success(f"Sold! Net Profit: Rs {net_pl:.2f} ({pl_pct:.2f}%)")
+                
+                # Success Message Breakdown
+                st.success(f"Sold! Net Profit: Rs {net_pl:.2f}")
+                with st.expander("See Transaction Breakdown"):
+                    st.write(f"Gross Amount: Rs {gross_sell_amt:,.2f}")
+                    st.write(f"(-) Commission: Rs {commission:.2f}")
+                    st.write(f"(-) SEBON/DP: Rs {sebon_fee + dp_charge:.2f}")
+                    st.write(f"(-) Capital Gain Tax: Rs {cgt_tax:.2f}")
+                    st.markdown(f"**(=) Net Received:** **Rs {received_amt:,.2f}**")
+                
                 st.balloons()
 
 # ================= HISTORY =================
@@ -1092,6 +1135,7 @@ elif menu == "Manage Data":
                 save_data(fname, pd.DataFrame()) # Save empty
                 st.error(f"{del_opt} has been wiped.")
                 st.cache_data.clear()
+
 
 
 
