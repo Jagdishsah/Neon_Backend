@@ -1,3 +1,2 @@
-Symbol,Sector,Units,Total_Cost,WACC,Stop_Loss,Notes
-HBL,Banking,10,1570.0,157.0,0.0,My First Share via FPO
-BANDIPUR,Tourism,10,1000.0,100.0,0.0,IPO 3rd Share
+Symbol,Sector,Units,Total_Cost,WACC,Stop_Loss,Notes,Buy_Date
+HBL,Banking,10,1570.0,157.0,0.0,My First Share via FPO,Unknown
