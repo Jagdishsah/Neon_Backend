@@ -170,7 +170,8 @@ def update_wealth_log(port, cache):
     
     # Get Daily Buy/Sell Volume from History
     hist = get_data("history.csv")
-    today_str = datetime.now().strftime("%Y-%m-%d")
+    # Nepal Time (UTC + 5:45)
+    today_str = (datetime.utcnow() + pd.Timedelta(hours=5, minutes=45)).strftime("%Y-%m-%d")
     
     bought_today = 0 # (Logic would need a 'buys.csv' or filtering portfolio notes, simplifying for now)
     sold_today = 0
@@ -217,7 +218,7 @@ def refresh_market_cache():
             "Change": live['change'],
             "High52": live['high'],
             "Low52": live['low'],
-            "LastUpdated": datetime.now().strftime("%Y-%m-%d %H:%M")
+            "LastUpdated": (datetime.utcnow() + pd.Timedelta(hours=5, minutes=45)).strftime("%Y-%m-%d %H:%M")
         })
         time.sleep(0.1)
         
@@ -551,7 +552,7 @@ elif menu == "Sell Stock":
                 hist = get_data("history.csv")
                 # Update History Record creation
                 new_rec = pd.DataFrame([{
-                    "Date": datetime.now().strftime("%Y-%m-%d"),
+                    "Date": (datetime.utcnow() + pd.Timedelta(hours=5, minutes=45)).strftime("%Y-%m-%d"),
                     "Symbol": sel_sym, 
                     "Units": u_sell, 
                     "Buy_Price": row['WACC'],  # <--- NEW FIELD ADDED
@@ -763,7 +764,7 @@ elif menu == "Reports":
                 self.set_font('Arial', 'B', 15)
                 self.cell(0, 10, 'NEPSE Professional Terminal - User Report', 0, 1, 'C')
                 self.set_font('Arial', 'I', 10)
-                self.cell(0, 10, f'Generated on: {datetime.now().strftime("%Y-%m-%d %H:%M")}', 0, 1, 'C')
+                self.cell(0, 10, f'Generated on: {(datetime.utcnow() + pd.Timedelta(hours=5, minutes=45)).strftime("%Y-%m-%d %H:%M")}', 0, 1, 'C')
                 self.ln(5)
 
             def footer(self):
@@ -980,6 +981,7 @@ elif menu == "Manage Data":
                 save_data(fname, pd.DataFrame()) # Save empty
                 st.error(f"{del_opt} has been wiped.")
                 st.cache_data.clear()
+
 
 
 
