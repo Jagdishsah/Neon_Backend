@@ -1,12 +1,16 @@
 Timestamp,Category,Symbol,Action,Details,Amount
-2026-02-17 22:01:35,SYSTEM,HISTORY,EDIT,Manually modified History via Data Editor,0.0
-2026-02-17 21:57:23,SYSTEM,PORTFOLIO,EDIT,Manually modified values via Data Editor,0.0
-2026-02-17 10:00:00,TRADE,DHEL,SELL,IPO Sell (Profit: 4509.18),5509.18
-2026-02-17 10:05:00,TRADE,BANDIPUR,SELL,IPO Sell Maybe Hold Long (Profit: 6343.03),7343.03
-2026-02-17 11:30:00,TRADE,TPC,SELL,After Loss i Chased BE (Profit: 60.64),3820.59
-2026-02-17 12:15:00,TRADE,KKHC,SELL,Gamble failed - sold immediately (Loss: -83.18),4916.4
-2026-02-17 13:45:00,TRADE,NHPC,SELL,Partial sold at Best BE (Loss: -71.19),2177.67
-2025-07-18 11:00:00,TRADE,HBL,BUY,My First Share as FPO,-1570.0
-2026-01-18 11:15:00,TRADE,ULHC,BUY,Sideways Scalping,-9658.89
-2026-01-29 12:30:00,TRADE,NHPC,BUY,Low Cap and Gamble after 5% Circuit,-2248.85
-2026-02-10 14:00:00,TRADE,SGHC,BUY,TMS 58 accumulation but Was Trap,-4372.24
+2025-07-18 11:00:00,TRADE,HBL,BUY,Added 10 units (Notes: My First Share as FPO),-1570.0
+2025-07-31 10:00:00,TRADE,DHEL,BUY,Bought 10 units (Closed later),-1000.0
+2025-08-27 10:00:00,TRADE,BANDIPUR,BUY,Bought 10 units (Closed later),-1000.0
+2026-01-04 13:00:00,TRADE,DHEL,SELL,IPO SEll,5509.18
+2026-01-04 13:00:00,TRADE,BANDIPUR,SELL,IPO Sell Maybe Hold Long,7343.03
+2026-01-18 11:00:00,TRADE,ULHC,BUY,Added 20 units (Notes: Sideways Scalping),-9658.90
+2026-01-20 10:00:00,TRADE,TPC,BUY,Bought 10 units (Closed later),-3759.95
+2026-01-29 10:00:00,TRADE,KKHC,BUY,Bought 20 units (Closed later),-4999.58
+2026-01-29 10:00:00,TRADE,NHPC,BUY,Bought 10 units (Closed later),-2248.85
+2026-01-29 11:00:00,TRADE,NHPC,BUY,Added 10 units (Notes: Low Cap and Gamble after 5% Circuit),-2248.86
+2026-01-29 13:00:00,TRADE,TPC,SELL,After Loss i Chased BE,3820.59
+2026-02-05 13:00:00,TRADE,KKHC,SELL,Gamble failed so i chsed BE and sold immediately always do partial Sold,4916.4
+2026-02-10 11:00:00,TRADE,SGHC,BUY,Added 10 units (Notes: TMS 58 accumulation but Was Trap),-4372.24
+2026-02-11 13:00:00,TRADE,NHPC,SELL,Partial sold at Best BE,2177.67
+2026-02-17 14:00:00,SYSTEM,ACTIVITY_LOG,EDIT,Manually modified via Data Editor,0.0
