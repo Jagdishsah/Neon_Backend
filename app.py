@@ -88,11 +88,12 @@ def get_data(filename):
         # Define schemas
         if "portfolio" in filename: cols = ["Symbol", "Sector", "Units", "Total_Cost", "WACC", "Stop_Loss", "Notes"]
         elif "watchlist" in filename: cols = ["Symbol", "Target", "Remark"]
-            # Update this line inside get_data():
         elif "history" in filename: cols = ["Date", "Symbol", "Units", "Buy_Price", "Sell_Price", "Net_PL", "Reason"]
-        # Update this line inside get_data():
         elif "diary" in filename: cols = ["Date", "Symbol", "Note", "Emotion", "Mistake", "Strategy"]
         elif "cache" in filename: cols = ["Symbol", "LTP", "Change", "High52", "Low52", "LastUpdated"]
+        elif "wealth" in filename: cols = ["Date", "Total_Investment", "Current_Value", "Total_PL", "Day_Change", "Sold_Volume"]
+        # 👇 ADD THIS NEW LINE 👇
+        elif "price_log" in filename: cols = ["Date", "Symbol", "LTP"]
         else: cols = []
         return pd.DataFrame(columns=cols)
 
@@ -202,34 +203,92 @@ def update_wealth_log(port, cache):
 def refresh_market_cache():
     port = get_data("portfolio.csv")
     watch = get_data("watchlist.csv")
+    price_log = get_data("price_log.csv")  # <--- Load History
+    
     symbols = set(port["Symbol"].tolist() + watch["Symbol"].tolist())
     
     if not symbols: return
     
     cache_list = []
+    new_log_entries = [] # To store new price movements
+    
     progress = st.progress(0, "Connecting to Market...")
+    
+    # Current Time (Nepal)
+    now_str = (datetime.utcnow() + pd.Timedelta(hours=5, minutes=45)).strftime("%Y-%m-%d %H:%M")
     
     for i, sym in enumerate(symbols):
         progress.progress((i+1)/len(symbols), f"Fetching {sym}...")
         live = fetch_live_single(sym)
+        current_ltp = live['price']
+        
+        # --- NEW CHANGE CALCULATION LOGIC ---
+        calculated_change = 0.0
+        
+        # Get history for this stock
+        if not price_log.empty:
+            sym_hist = price_log[price_log["Symbol"] == sym]
+        else:
+            sym_hist = pd.DataFrame()
+
+        if not sym_hist.empty:
+            last_stored_ltp = float(sym_hist.iloc[-1]["LTP"])
+            
+            if current_ltp != last_stored_ltp:
+                # Case 1: Price MOVED since last check
+                calculated_change = current_ltp - last_stored_ltp
+                
+                # Record this new movement
+                new_log_entries.append({
+                    "Date": now_str,
+                    "Symbol": sym,
+                    "LTP": current_ltp
+                })
+            else:
+                # Case 2: Price is SAME as last check
+                # Compare with the one BEFORE the last (Previous Cache)
+                if len(sym_hist) >= 2:
+                    prev_stored_ltp = float(sym_hist.iloc[-2]["LTP"])
+                    calculated_change = current_ltp - prev_stored_ltp
+                else:
+                    calculated_change = 0.0 # Not enough data
+        else:
+            # First time seeing this stock, add to log
+            new_log_entries.append({
+                "Date": now_str,
+                "Symbol": sym,
+                "LTP": current_ltp
+            })
+            calculated_change = 0.0
+            
+        # ------------------------------------
+
         cache_list.append({
             "Symbol": sym,
-            "LTP": live['price'],
-            "Change": live['change'],
+            "LTP": current_ltp,
+            "Change": calculated_change, # <--- Use our calculated change
             "High52": live['high'],
             "Low52": live['low'],
-            "LastUpdated": (datetime.utcnow() + pd.Timedelta(hours=5, minutes=45)).strftime("%Y-%m-%d %H:%M")
+            "LastUpdated": now_str
         })
         time.sleep(0.1)
         
     progress.empty()
+    
+    # Save Cache
     new_cache = pd.DataFrame(cache_list)
     save_data("cache.csv", new_cache)
     
-    # --- TRIGGER WEALTH LOG UPDATE ---
+    # Save Price Log (Only if there are new movements)
+    if new_log_entries:
+        new_entries_df = pd.DataFrame(new_log_entries)
+        price_log = pd.concat([price_log, new_entries_df], ignore_index=True)
+        save_data("price_log.csv", price_log)
+    
+    # Trigger Wealth Update
     update_wealth_log(port, new_cache)
     
-    st.toast("Market Data & Wealth Log Updated!", icon="✅")
+    st.toast("Market Data Updated with Smart Change!", icon="✅")
     st.cache_data.clear()
 
 # --- CALCULATORS ---
@@ -981,6 +1040,7 @@ elif menu == "Manage Data":
                 save_data(fname, pd.DataFrame()) # Save empty
                 st.error(f"{del_opt} has been wiped.")
                 st.cache_data.clear()
+
 
 
 
