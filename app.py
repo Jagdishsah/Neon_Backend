@@ -419,8 +419,8 @@ if st.sidebar.button("🔄 Refresh Market Data"):
     st.rerun()
 
 # ================= DASHBOARD =================
-if menu == "Dashboard":
-    # 1. Load All Data Sources
+elif menu == "Dashboard":
+    # 1. Load All Data
     port = get_data("portfolio.csv")
     cache = get_data("cache.csv")
     hist = get_data("history.csv")
@@ -432,7 +432,6 @@ if menu == "Dashboard":
         df = port.copy() if not port.empty else pd.DataFrame()
         if not df.empty: df["LTP"] = 0
 
-    # 3. Header & Last Update Time
     last_up = cache["LastUpdated"].iloc[0] if not cache.empty else "Never"
     st.title("📊 Market Dashboard")
     st.caption(f"Last Updated: {last_up} (Nepal Time)")
@@ -440,150 +439,133 @@ if menu == "Dashboard":
     if df.empty:
         st.info("Portfolio is empty. Start by adding trades.")
     else:
-        # --- CALCULATIONS ---
+        # --- METRIC CALCULATIONS ---
         
-        # A. Portfolio Metrics (Unrealized)
-        total_inv = df["Total_Cost"].sum()
-        total_val = 0
-        total_pl = 0
+        # A. Current Holdings (Unrealized)
+        curr_inv = df["Total_Cost"].sum()
+        curr_val = 0
         day_change = 0
         alerts = []
         
-        # Sector Data Prep
         sector_data = {}
-
         for _, row in df.iterrows():
             ltp = row.get("LTP", 0)
             if ltp == 0: ltp = row["WACC"]
             
-            # Calculate Value & P/L
             val = row["Units"] * ltp
-            pl = val - row["Total_Cost"]
-            
-            # Calculate Day Change
-            # If we have a stored "Change" from smart cache, use it
             d_chg = row["Units"] * row.get("Change", 0)
             
-            total_val += val
-            total_pl += pl
+            curr_val += val
             day_change += d_chg
             
-            # Sector Aggregation
+            # Sector
             sec = row.get("Sector", "Unclassified")
             sector_data[sec] = sector_data.get(sec, 0) + val
             
-            # Stop Loss Alerts
+            # Stop Loss
             sl = row.get("Stop_Loss", 0)
             if sl > 0 and ltp < sl:
                 alerts.append(f"⚠️ **STOP LOSS HIT:** {row['Symbol']} @ {ltp} (SL: {sl})")
-
-        # Unrealized Return %
-        unrealized_ret_pct = (total_pl / total_inv * 100) if total_inv else 0
         
-        # B. History Metrics (Realized)
+        curr_pl = curr_val - curr_inv
+        curr_ret = (curr_pl / curr_inv * 100) if curr_inv else 0
+
+        # B. Closed Holdings (Realized)
         realized_pl = 0
-        realized_pct = 0
+        realized_inv = 0
+        realized_recv = 0
+        
         if not hist.empty:
             realized_pl = hist["Net_PL"].sum()
-            
-            # Calculate Total Capital used for these closed trades
-            realized_inv = 0
+            # Handle compatibility
             if "Invested_Amount" in hist.columns:
                 realized_inv = hist["Invested_Amount"].sum()
+                realized_recv = hist["Received_Amount"].sum()
             elif "Buy_Price" in hist.columns:
                 realized_inv = (hist["Units"] * hist["Buy_Price"]).sum()
-                
-            if realized_inv > 0:
-                realized_pct = (realized_pl / realized_inv) * 100
+                realized_recv = (hist["Units"] * hist["Sell_Price"]).sum()
 
-        # --- DISPLAY METRICS ---
+        realized_ret = (realized_pl / realized_inv * 100) if realized_inv > 0 else 0
+
+        # C. Lifetime Stats (The New Feature)
+        lifetime_invested = curr_inv + realized_inv
+        lifetime_received = realized_recv # Cash back in pocket
+        net_exposure = lifetime_received - lifetime_invested 
+        # (Net Exposure: If negative, that amount is still "stuck" in the market)
+
+        # --- DISPLAY ---
         
-        # Row 1: The "Big Picture" (Wealth & Movement)
+        # Row 1: Snapshot
         st.markdown("### 🏦 Net Worth Snapshot")
         m1, m2, m3 = st.columns(3)
-        m1.metric("Current Portfolio Value", f"Rs {total_val:,.0f}")
-        m2.metric("Total Active Investment", f"Rs {total_inv:,.0f}")
+        m1.metric("Current Portfolio Value", f"Rs {curr_val:,.0f}")
+        m2.metric("Total Active Investment", f"Rs {curr_inv:,.0f}")
         m3.metric("Today's Change", f"Rs {day_change:,.0f}", delta=day_change)
         
         st.markdown("---")
         
-        # Row 2: Performance Breakdown (Realized vs Unrealized)
+        # Row 2: P/L Analysis
         st.markdown("### ⚖️ Profit/Loss Analysis")
         c1, c2, c3, c4 = st.columns(4)
+        c1.metric("💰 Net Realized P/L", f"Rs {realized_pl:,.0f}", delta=f"{realized_ret:.2f}%")
+        c2.metric("📈 Unrealized P/L", f"Rs {curr_pl:,.0f}", delta=f"{curr_ret:.2f}%")
+        c3.metric("🏆 Lifetime P/L", f"Rs {realized_pl + curr_pl:,.0f}", help="Realized + Unrealized")
         
-        c1.metric("💰 Net Realized P/L", f"Rs {realized_pl:,.0f}", 
-                  delta=f"{realized_pct:.2f}%", delta_color="normal",
-                  help="Actual profit booked in your bank account from sold stocks.")
-                  
-        c2.metric("📈 Unrealized P/L", f"Rs {total_pl:,.0f}", 
-                  delta=f"{unrealized_ret_pct:.2f}%", delta_color="normal",
-                  help="Paper profit from stocks you are currently holding.")
+        # Best Winner Logic
+        best_stock = "-"
+        if not hist.empty:
+            best_trade = hist.loc[hist["Net_PL"].idxmax()]
+            best_stock = f"{best_trade['Symbol']} (+{best_trade['Net_PL']:.0f})"
+        c4.metric("🥇 Best Trade", best_stock)
 
-        # c3 & c4 can be used for extra stats or left empty/combined
-        # Let's use them for Total P/L (Combined)
-        total_lifetime_pl = realized_pl + total_pl
-        c3.metric("🏆 Lifetime P/L", f"Rs {total_lifetime_pl:,.0f}", 
-                  help="Realized + Unrealized combined")
+        st.markdown("---")
+
+        # Row 3: Investment Snapshot (New Feature)
+        st.markdown("### 💼 Investment Cycle (Lifetime)")
+        i1, i2, i3, i4 = st.columns(4)
         
+        i1.metric("Total Capital Deployed", f"Rs {lifetime_invested:,.0f}", 
+                  help="Sum of (Cost of Sold Stocks + Cost of Held Stocks). The total money you have ever put to work.")
+        
+        i2.metric("Total Cash Recycled", f"Rs {lifetime_received:,.0f}", 
+                  help="Total money returned to bank from sales.")
+                  
+        i3.metric("Net Cash Flow", f"Rs {net_exposure:,.0f}", 
+                  help="Total Received - Total Invested. Negative means this amount is currently 'at risk' in the market.")
+        
+        turnover = (realized_inv / curr_inv * 100) if curr_inv else 0
+        i4.metric("Capital Turnover", f"{turnover:.1f}%", help="How many times you have rotated your capital.")
+
         st.markdown("---")
         
         # --- VISUALS & ALERTS ---
         col_chart, col_alert = st.columns([2, 1])
         
         with col_chart:
-            st.subheader("Sector Analysis")
-            
-            # Selector for Chart Type
-            chart_metric = st.selectbox(
-                "View By:", 
-                ["Current Value", "Total Investment", "Profit/Loss", "Quantity"], 
-                index=0,
-                label_visibility="collapsed"
-            )
-            
-            # Prepare Data for Chart
-            sec_groups = {}
-            for _, row in df.iterrows():
-                sec = row.get("Sector", "Unclassified")
-                ltp = row.get("LTP", 0) if row.get("LTP", 0) > 0 else row["WACC"]
-                
-                val = 0
-                if chart_metric == "Current Value":
-                    val = row["Units"] * ltp
-                elif chart_metric == "Total Investment":
-                    val = row["Total_Cost"]
-                elif chart_metric == "Profit/Loss":
-                    val = (row["Units"] * ltp) - row["Total_Cost"]
-                    if val < 0: val = 0 # Hide negatives for Pie Chart
-                elif chart_metric == "Quantity":
-                    val = row["Units"]
-
-                sec_groups[sec] = sec_groups.get(sec, 0) + val
-
-            if sec_groups:
-                sec_df = pd.DataFrame(list(sec_groups.items()), columns=["Sector", "Metric"])
-                fig = px.pie(sec_df, values="Metric", names="Sector", hole=0.4)
+            st.subheader("Sector Allocation")
+            sec_df = pd.DataFrame(list(sector_data.items()), columns=["Sector", "Value"])
+            if not sec_df.empty:
+                fig = px.pie(sec_df, values="Value", names="Sector", hole=0.4)
                 st.plotly_chart(fig, use_container_width=True)
             else:
-                st.info("No data for this metric.")
+                st.info("No data.")
                 
         with col_alert:
-            st.subheader("📢 Notifications")
+            st.subheader("📢 Alerts")
             if alerts:
                 for a in alerts: st.error(a)
-            
-            # Watchlist Scan
+            else:
+                st.info("System Normal.")
+                
+            # Watchlist
             wl = get_data("watchlist.csv")
             if not wl.empty and not cache.empty:
                 wl_m = pd.merge(wl, cache, on="Symbol", how="left")
                 hits = wl_m[(wl_m["LTP"] <= wl_m["Target"]) & (wl_m["LTP"] > 0)]
                 if not hits.empty:
+                    st.markdown("---")
                     for _, h in hits.iterrows():
-                        st.success(f"🎯 **BUY SIGNAL:** {h['Symbol']} @ {h['LTP']}")
-                else:
-                    st.info("No Watchlist targets hit.")
-            else:
-                st.info("Watchlist is clear.")
+                        st.success(f"🎯 **BUY:** {h['Symbol']} @ {h['LTP']}")
                 
 # ================= PORTFOLIO =================
 elif menu == "Portfolio":
@@ -916,66 +898,54 @@ elif menu == "Activity Log":
     df = get_data("activity_log.csv")
     
     if df.empty:
-        st.info("No activity recorded yet. Start trading to generate logs.")
+        st.info("No activity recorded yet.")
     else:
-        # --- SIDEBAR FILTERS ---
-        st.sidebar.header("🔍 Filter Logs")
+        # --- FILTERS ---
+        with st.expander("🔍 Filter Logs", expanded=False):
+            c1, c2 = st.columns(2)
+            cats = ["All"] + list(df["Category"].unique())
+            sel_cat = c1.selectbox("Category", cats)
+            search_sym = c2.text_input("Search Symbol").upper()
         
-        # 1. Category Filter
-        cats = ["All"] + list(df["Category"].unique())
-        sel_cat = st.sidebar.selectbox("Category", cats)
-        
-        # 2. Symbol Search
-        search_sym = st.sidebar.text_input("Search Symbol").upper()
-        
-        # 3. Date Filter (Optional logic can be added here)
-        
-        # --- APPLY FILTERS ---
+        # Apply Filters
         filtered_df = df.copy()
         if sel_cat != "All":
             filtered_df = filtered_df[filtered_df["Category"] == sel_cat]
         if search_sym:
             filtered_df = filtered_df[filtered_df["Symbol"].str.contains(search_sym, na=False)]
             
-        # --- KPI SUMMARY ---
-        # Calculate total money moved in this view
-        inflow = filtered_df[filtered_df["Amount"] > 0]["Amount"].sum()
-        outflow = abs(filtered_df[filtered_df["Amount"] < 0]["Amount"].sum())
-        
-        k1, k2, k3 = st.columns(3)
-        k1.metric("Log Entries", len(filtered_df))
-        k2.metric("Total Inflow (Sells)", f"Rs {inflow:,.0f}", delta_color="normal")
-        k3.metric("Total Outflow (Buys)", f"Rs {outflow:,.0f}", delta_color="normal")
-        
-        st.markdown("---")
-        
-        # --- DISPLAY LOGS ---
-        # We will use a styled dataframe to make it look like a real system log
-        
+        # --- DISPLAY ---
         def highlight_action(val):
             color = 'white'
             if val == 'BUY': color = '#ffcccb' # Light Red
             elif val == 'SELL': color = '#90ee90' # Light Green
-            elif val == 'STOP_LOSS': color = '#ff4b4b' # Red
-            elif val == 'TARGET': color = '#ffd700' # Gold
             return f'background-color: {color}; color: black'
 
-        # Show the table
         st.dataframe(
             filtered_df.style.map(highlight_action, subset=['Action'])
             .format({"Amount": "Rs {:,.2f}"}),
             use_container_width=True,
-            height=600
+            height=500
         )
         
-        # --- EXPORT ---
+        # --- TOTALS (New Feature) ---
+        st.markdown("### 💰 Cash Flow Summary")
+        
+        total_inflow = filtered_df[filtered_df["Amount"] > 0]["Amount"].sum()
+        total_outflow = filtered_df[filtered_df["Amount"] < 0]["Amount"].sum()
+        net_flow = filtered_df["Amount"].sum()
+        
+        k1, k2, k3 = st.columns(3)
+        k1.metric("Total Credit (Sales)", f"Rs {total_inflow:,.2f}")
+        k2.metric("Total Debit (Buys)", f"Rs {total_outflow:,.2f}")
+        k3.metric("Net Cash Flow", f"Rs {net_flow:,.2f}", 
+                  delta=f"{net_flow:,.2f}", 
+                  help="Positive = You took out more money than you put in.\nNegative = Money is still invested.")
+
+        # Export
         csv = filtered_df.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            "⬇️ Download Log CSV",
-            data=csv,
-            file_name="trade_activity_log.csv",
-            mime="text/csv",
-        )
+        st.download_button("⬇️ Download CSV", csv, "activity_log.csv", "text/csv")
+
 
 # ================= WACC PROJECTION (NEW) =================
 elif menu == "WACC Projection":
@@ -1370,6 +1340,7 @@ elif menu == "Manage Data":
         if st.button("Save Log Changes"):
             save_data("activity_log.csv", edit_log)
             st.success("Logs Saved.")
+
 
 
 
