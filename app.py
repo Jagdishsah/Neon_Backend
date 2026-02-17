@@ -89,6 +89,9 @@ def get_data(filename):
         if "portfolio" in filename: 
             cols = ["Symbol", "Sector", "Units", "Total_Cost", "WACC", "Buy_Date", "Stop_Loss", "Notes"]
         elif "watchlist" in filename: cols = ["Symbol", "Target", "Remark"]
+            # Add this line inside get_data schema:
+        elif "activity_log" in filename:
+            cols = ["Timestamp", "Category", "Symbol", "Action", "Details", "Amount"]
         elif "history" in filename: 
             cols = ["Date", "Buy_Date", "Symbol", "Units", "Buy_Price", "Sell_Price", "Invested_Amount", "Received_Amount", "Net_PL", "PL_Pct", "Reason"]
         elif "diary" in filename: cols = ["Date", "Symbol", "Note", "Emotion", "Mistake", "Strategy"]
@@ -354,6 +357,29 @@ def refresh_market_cache():
     st.cache_data.clear()
 
 # --- CALCULATORS ---
+def log_activity(category, symbol, action, details, amount=0.0):
+    """
+    Logs an event to activity_log.csv
+    Category: TRADE, ALERT, SYSTEM, NOTE
+    Action: BUY, SELL, STOP_LOSS, TARGET, UPDATE
+    """
+    log = get_data("activity_log.csv")
+    
+    # Nepal Time
+    now_str = (datetime.utcnow() + pd.Timedelta(hours=5, minutes=45)).strftime("%Y-%m-%d %H:%M:%S")
+    
+    new_entry = pd.DataFrame([{
+        "Timestamp": now_str,
+        "Category": category,
+        "Symbol": symbol,
+        "Action": action,
+        "Details": details,
+        "Amount": amount
+    }])
+    
+    log = pd.concat([new_entry, log], ignore_index=True) # Add new at top
+    save_data("activity_log.csv", log)
+
 def get_broker_commission(amount):
     if amount <= 50000: rate = 0.36
     elif amount <= 500000: rate = 0.33
@@ -702,6 +728,9 @@ elif menu == "Add Trade":
                 st.success(f"Added {sym} to Portfolio with date {buy_dt}.")
             
             save_data("portfolio.csv", port)
+            # ... inside Add Trade, after save_data("portfolio.csv", port) ...
+            log_activity("TRADE", sym, "BUY", f"Added/Averaged {units} units @ Rs {price}", -total)
+
 # ================= SELL STOCK =================
 elif menu == "Sell Stock":
     st.title("💰 Sell Stock")
@@ -805,6 +834,8 @@ elif menu == "Sell Stock":
                 
                 save_data("portfolio.csv", port)
                 save_data("history.csv", hist)
+                # ... inside Sell Stock, after save_data("history.csv", hist) ...
+                log_activity("TRADE", sel_sym, "SELL", f"Sold {u_sell} units @ Rs {p_sell} ({reason})", received_amt)
                 
                 # Success Message Breakdown
                 st.success(f"Sold! Net Profit: Rs {net_pl:.2f}")
@@ -876,6 +907,76 @@ elif menu == "History":
             }).background_gradient(subset=["Net_PL", "PL_Pct"], cmap="RdYlGn", vmin=-20, vmax=20),
             use_container_width=True, hide_index=True
         )
+
+# ================= ACTIVITY LOG =================
+elif menu == "Activity Log":
+    st.title("🗂 Trade Audit Log")
+    st.caption("A chronological record of all actions and system events.")
+    
+    df = get_data("activity_log.csv")
+    
+    if df.empty:
+        st.info("No activity recorded yet. Start trading to generate logs.")
+    else:
+        # --- SIDEBAR FILTERS ---
+        st.sidebar.header("🔍 Filter Logs")
+        
+        # 1. Category Filter
+        cats = ["All"] + list(df["Category"].unique())
+        sel_cat = st.sidebar.selectbox("Category", cats)
+        
+        # 2. Symbol Search
+        search_sym = st.sidebar.text_input("Search Symbol").upper()
+        
+        # 3. Date Filter (Optional logic can be added here)
+        
+        # --- APPLY FILTERS ---
+        filtered_df = df.copy()
+        if sel_cat != "All":
+            filtered_df = filtered_df[filtered_df["Category"] == sel_cat]
+        if search_sym:
+            filtered_df = filtered_df[filtered_df["Symbol"].str.contains(search_sym, na=False)]
+            
+        # --- KPI SUMMARY ---
+        # Calculate total money moved in this view
+        inflow = filtered_df[filtered_df["Amount"] > 0]["Amount"].sum()
+        outflow = abs(filtered_df[filtered_df["Amount"] < 0]["Amount"].sum())
+        
+        k1, k2, k3 = st.columns(3)
+        k1.metric("Log Entries", len(filtered_df))
+        k2.metric("Total Inflow (Sells)", f"Rs {inflow:,.0f}", delta_color="normal")
+        k3.metric("Total Outflow (Buys)", f"Rs {outflow:,.0f}", delta_color="normal")
+        
+        st.markdown("---")
+        
+        # --- DISPLAY LOGS ---
+        # We will use a styled dataframe to make it look like a real system log
+        
+        def highlight_action(val):
+            color = 'white'
+            if val == 'BUY': color = '#ffcccb' # Light Red
+            elif val == 'SELL': color = '#90ee90' # Light Green
+            elif val == 'STOP_LOSS': color = '#ff4b4b' # Red
+            elif val == 'TARGET': color = '#ffd700' # Gold
+            return f'background-color: {color}; color: black'
+
+        # Show the table
+        st.dataframe(
+            filtered_df.style.map(highlight_action, subset=['Action'])
+            .format({"Amount": "Rs {:,.2f}"}),
+            use_container_width=True,
+            height=600
+        )
+        
+        # --- EXPORT ---
+        csv = filtered_df.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            "⬇️ Download Log CSV",
+            data=csv,
+            file_name="trade_activity_log.csv",
+            mime="text/csv",
+        )
+
 # ================= WACC PROJECTION (NEW) =================
 elif menu == "WACC Projection":
     st.title("🧮 WACC Projector")
@@ -1239,6 +1340,7 @@ elif menu == "Manage Data":
                 save_data(fname, pd.DataFrame()) # Save empty
                 st.error(f"{del_opt} has been wiped.")
                 st.cache_data.clear()
+
 
 
 
