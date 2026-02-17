@@ -96,6 +96,9 @@ def get_data(filename):
         elif "wealth" in filename: cols = ["Date", "Total_Investment", "Current_Value", "Total_PL", "Day_Change", "Sold_Volume"]
         # 👇 ADD THIS NEW LINE 👇
         elif "price_log" in filename: cols = ["Date", "Symbol", "LTP"]
+        # Add this line inside the get_data function schema list:
+        elif "Data" in filename: 
+            cols = ["Date", "Realized_PL", "Realized_PL_Pct", "Unrealized_PL", "Unrealized_PL_Pct"]
         else: cols = []
         return pd.DataFrame(columns=cols)
 
@@ -202,21 +205,80 @@ def update_wealth_log(port, cache):
     log = pd.concat([log, pd.DataFrame([new_row])], ignore_index=True)
     save_data("wealth.csv", log)
 
+def update_data_log(port, hist, cache):
+    """Calculates Realized vs Unrealized metrics and saves to Data.csv"""
+    # 1. Calculate UNREALIZED (Paper Profit)
+    unrealized_pl = 0
+    unrealized_inv = 0
+    
+    if not port.empty:
+        # Merge with cache to get latest LTP
+        df = pd.merge(port, cache, on="Symbol", how="left").fillna(0)
+        for _, row in df.iterrows():
+            ltp = row.get("LTP", 0)
+            if ltp == 0: ltp = row["WACC"]
+            
+            curr_val = row["Units"] * ltp
+            cost = row["Total_Cost"]
+            
+            unrealized_pl += (curr_val - cost)
+            unrealized_inv += cost
+            
+    unrealized_pct = (unrealized_pl / unrealized_inv * 100) if unrealized_inv > 0 else 0.0
+
+    # 2. Calculate REALIZED (Booked Profit)
+    realized_pl = 0
+    realized_inv = 0
+    
+    if not hist.empty:
+        realized_pl = hist["Net_PL"].sum()
+        # Compatibility check for Invested_Amount
+        if "Invested_Amount" in hist.columns:
+            realized_inv = hist["Invested_Amount"].sum()
+        else:
+            # Fallback for old data
+            realized_inv = (hist["Units"] * hist["Buy_Price"]).sum() if "Buy_Price" in hist.columns else 0
+
+    realized_pct = (realized_pl / realized_inv * 100) if realized_inv > 0 else 0.0
+
+    # 3. Prepare Data Entry
+    today_str = (datetime.utcnow() + pd.Timedelta(hours=5, minutes=45)).strftime("%Y-%m-%d")
+    
+    new_row = {
+        "Date": today_str,
+        "Realized_PL": round(realized_pl, 2),
+        "Realized_PL_Pct": round(realized_pct, 2),
+        "Unrealized_PL": round(unrealized_pl, 2),
+        "Unrealized_PL_Pct": round(unrealized_pct, 2)
+    }
+
+    # 4. Save to Data.csv
+    log = get_data("Data.csv")
+    
+    # Overwrite if entry exists for today (to update with latest market data)
+    if not log.empty and "Date" in log.columns:
+        log = log[log["Date"] != today_str]
+    
+    log = pd.concat([log, pd.DataFrame([new_row])], ignore_index=True)
+    save_data("Data.csv", log)
+
 def refresh_market_cache():
+    # 1. Load ALL required data
     port = get_data("portfolio.csv")
     watch = get_data("watchlist.csv")
-    price_log = get_data("price_log.csv")  # <--- Load History
+    price_log = get_data("price_log.csv")
+    hist = get_data("history.csv")  # <--- WAS MISSING
     
     symbols = set(port["Symbol"].tolist() + watch["Symbol"].tolist())
     
     if not symbols: return
     
     cache_list = []
-    new_log_entries = [] # To store new price movements
+    new_log_entries = []
     
     progress = st.progress(0, "Connecting to Market...")
     
-    # Current Time (Nepal)
+    # Nepal Time
     now_str = (datetime.utcnow() + pd.Timedelta(hours=5, minutes=45)).strftime("%Y-%m-%d %H:%M")
     
     for i, sym in enumerate(symbols):
@@ -224,10 +286,10 @@ def refresh_market_cache():
         live = fetch_live_single(sym)
         current_ltp = live['price']
         
-        # --- NEW CHANGE CALCULATION LOGIC ---
+        # --- SMART CHANGE LOGIC ---
         calculated_change = 0.0
         
-        # Get history for this stock
+        # Check Price History
         if not price_log.empty:
             sym_hist = price_log[price_log["Symbol"] == sym]
         else:
@@ -237,25 +299,22 @@ def refresh_market_cache():
             last_stored_ltp = float(sym_hist.iloc[-1]["LTP"])
             
             if current_ltp != last_stored_ltp:
-                # Case 1: Price MOVED since last check
+                # Price MOVED: Calculate real change and log it
                 calculated_change = current_ltp - last_stored_ltp
-                
-                # Record this new movement
                 new_log_entries.append({
                     "Date": now_str,
                     "Symbol": sym,
                     "LTP": current_ltp
                 })
             else:
-                # Case 2: Price is SAME as last check
-                # Compare with the one BEFORE the last (Previous Cache)
+                # Price SAME: Compare with PREVIOUS log to keep the change visible
                 if len(sym_hist) >= 2:
                     prev_stored_ltp = float(sym_hist.iloc[-2]["LTP"])
                     calculated_change = current_ltp - prev_stored_ltp
                 else:
-                    calculated_change = 0.0 # Not enough data
+                    calculated_change = 0.0
         else:
-            # First time seeing this stock, add to log
+            # First time seeing stock
             new_log_entries.append({
                 "Date": now_str,
                 "Symbol": sym,
@@ -263,12 +322,12 @@ def refresh_market_cache():
             })
             calculated_change = 0.0
             
-        # ------------------------------------
+        # ---------------------------
 
         cache_list.append({
             "Symbol": sym,
             "LTP": current_ltp,
-            "Change": calculated_change, # <--- Use our calculated change
+            "Change": calculated_change,
             "High52": live['high'],
             "Low52": live['low'],
             "LastUpdated": now_str
@@ -277,20 +336,21 @@ def refresh_market_cache():
         
     progress.empty()
     
-    # Save Cache
+    # 2. Save Market Cache
     new_cache = pd.DataFrame(cache_list)
     save_data("cache.csv", new_cache)
     
-    # Save Price Log (Only if there are new movements)
+    # 3. Save Price Log (Only if movement happened)
     if new_log_entries:
         new_entries_df = pd.DataFrame(new_log_entries)
         price_log = pd.concat([price_log, new_entries_df], ignore_index=True)
         save_data("price_log.csv", price_log)
     
-    # Trigger Wealth Update
-    update_wealth_log(port, new_cache)
+    # 4. Update Background Logs
+    update_wealth_log(port, new_cache)       # Tracks Total Net Worth
+    update_data_log(port, hist, new_cache)   # <--- WAS MISSING (Tracks P/L %)
     
-    st.toast("Market Data Updated with Smart Change!", icon="✅")
+    st.toast("Market Data & Logs Updated!", icon="✅")
     st.cache_data.clear()
 
 # --- CALCULATORS ---
@@ -334,25 +394,29 @@ if st.sidebar.button("🔄 Refresh Market Data"):
 
 # ================= DASHBOARD =================
 if menu == "Dashboard":
-    # Load
+    # 1. Load All Data Sources
     port = get_data("portfolio.csv")
     cache = get_data("cache.csv")
+    hist = get_data("history.csv")
     
+    # 2. Merge Portfolio with Market Data
     if not port.empty and not cache.empty:
         df = pd.merge(port, cache, on="Symbol", how="left").fillna(0)
     else:
         df = port.copy() if not port.empty else pd.DataFrame()
         if not df.empty: df["LTP"] = 0
 
-    # Welcome
+    # 3. Header & Last Update Time
     last_up = cache["LastUpdated"].iloc[0] if not cache.empty else "Never"
     st.title("📊 Market Dashboard")
-    st.caption(f"Last Updated: {last_up}")
+    st.caption(f"Last Updated: {last_up} (Nepal Time)")
 
     if df.empty:
         st.info("Portfolio is empty. Start by adding trades.")
     else:
-        # Aggregation
+        # --- CALCULATIONS ---
+        
+        # A. Portfolio Metrics (Unrealized)
         total_inv = df["Total_Cost"].sum()
         total_val = 0
         total_pl = 0
@@ -366,41 +430,84 @@ if menu == "Dashboard":
             ltp = row.get("LTP", 0)
             if ltp == 0: ltp = row["WACC"]
             
-            val, pl, _, d_chg = calculate_metrics(row["Units"], row["Total_Cost"], ltp, row.get("Change", 0))
+            # Calculate Value & P/L
+            val = row["Units"] * ltp
+            pl = val - row["Total_Cost"]
+            
+            # Calculate Day Change
+            # If we have a stored "Change" from smart cache, use it
+            d_chg = row["Units"] * row.get("Change", 0)
             
             total_val += val
             total_pl += pl
             day_change += d_chg
             
-            # Sector
+            # Sector Aggregation
             sec = row.get("Sector", "Unclassified")
             sector_data[sec] = sector_data.get(sec, 0) + val
             
-            # SL Alert
+            # Stop Loss Alerts
             sl = row.get("Stop_Loss", 0)
             if sl > 0 and ltp < sl:
                 alerts.append(f"⚠️ **STOP LOSS HIT:** {row['Symbol']} @ {ltp} (SL: {sl})")
 
-        # 1. Main Metrics
-        ret_pct = (total_pl / total_inv * 100) if total_inv else 0
+        # Unrealized Return %
+        unrealized_ret_pct = (total_pl / total_inv * 100) if total_inv else 0
         
-        c1, c2, c3, c4, c5 = st.columns(5)
-        c1.metric("Total Investment", f"Rs {total_inv:,.0f}")
-        c2.metric("Current Value", f"Rs {total_val:,.0f}")
-        c3.metric("Day Change", f"Rs {day_change:,.0f}", delta=day_change)
-        c4.metric("Total P/L", f"Rs {total_pl:,.0f}", delta_color="normal")
-        c5.metric("Return %", f"{ret_pct:.2f}%", delta_color="normal")
+        # B. History Metrics (Realized)
+        realized_pl = 0
+        realized_pct = 0
+        if not hist.empty:
+            realized_pl = hist["Net_PL"].sum()
+            
+            # Calculate Total Capital used for these closed trades
+            realized_inv = 0
+            if "Invested_Amount" in hist.columns:
+                realized_inv = hist["Invested_Amount"].sum()
+            elif "Buy_Price" in hist.columns:
+                realized_inv = (hist["Units"] * hist["Buy_Price"]).sum()
+                
+            if realized_inv > 0:
+                realized_pct = (realized_pl / realized_inv) * 100
+
+        # --- DISPLAY METRICS ---
+        
+        # Row 1: The "Big Picture" (Wealth & Movement)
+        st.markdown("### 🏦 Net Worth Snapshot")
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Current Portfolio Value", f"Rs {total_val:,.0f}")
+        m2.metric("Total Active Investment", f"Rs {total_inv:,.0f}")
+        m3.metric("Today's Change", f"Rs {day_change:,.0f}", delta=day_change)
         
         st.markdown("---")
         
-        # 2. Visuals & Alerts
+        # Row 2: Performance Breakdown (Realized vs Unrealized)
+        st.markdown("### ⚖️ Profit/Loss Analysis")
+        c1, c2, c3, c4 = st.columns(4)
+        
+        c1.metric("💰 Net Realized P/L", f"Rs {realized_pl:,.0f}", 
+                  delta=f"{realized_pct:.2f}%", delta_color="normal",
+                  help="Actual profit booked in your bank account from sold stocks.")
+                  
+        c2.metric("📈 Unrealized P/L", f"Rs {total_pl:,.0f}", 
+                  delta=f"{unrealized_ret_pct:.2f}%", delta_color="normal",
+                  help="Paper profit from stocks you are currently holding.")
+
+        # c3 & c4 can be used for extra stats or left empty/combined
+        # Let's use them for Total P/L (Combined)
+        total_lifetime_pl = realized_pl + total_pl
+        c3.metric("🏆 Lifetime P/L", f"Rs {total_lifetime_pl:,.0f}", 
+                  help="Realized + Unrealized combined")
+        
+        st.markdown("---")
+        
+        # --- VISUALS & ALERTS ---
         col_chart, col_alert = st.columns([2, 1])
         
-        # ... inside Dashboard ...
         with col_chart:
             st.subheader("Sector Analysis")
             
-            # 1. Selector for Chart Type
+            # Selector for Chart Type
             chart_metric = st.selectbox(
                 "View By:", 
                 ["Current Value", "Total Investment", "Profit/Loss", "Quantity"], 
@@ -408,10 +515,8 @@ if menu == "Dashboard":
                 label_visibility="collapsed"
             )
             
-            # 2. Map Selector to DataFrame Columns
-            # We need to build a sector_df based on the selection
+            # Prepare Data for Chart
             sec_groups = {}
-            
             for _, row in df.iterrows():
                 sec = row.get("Sector", "Unclassified")
                 ltp = row.get("LTP", 0) if row.get("LTP", 0) > 0 else row["WACC"]
@@ -423,13 +528,12 @@ if menu == "Dashboard":
                     val = row["Total_Cost"]
                 elif chart_metric == "Profit/Loss":
                     val = (row["Units"] * ltp) - row["Total_Cost"]
-                    if val < 0: val = 0 # Pie charts don't like negative numbers
+                    if val < 0: val = 0 # Hide negatives for Pie Chart
                 elif chart_metric == "Quantity":
                     val = row["Units"]
 
                 sec_groups[sec] = sec_groups.get(sec, 0) + val
 
-            # 3. Plot
             if sec_groups:
                 sec_df = pd.DataFrame(list(sec_groups.items()), columns=["Sector", "Metric"])
                 fig = px.pie(sec_df, values="Metric", names="Sector", hole=0.4)
@@ -454,7 +558,7 @@ if menu == "Dashboard":
                     st.info("No Watchlist targets hit.")
             else:
                 st.info("Watchlist is clear.")
-
+                
 # ================= PORTFOLIO =================
 elif menu == "Portfolio":
     st.title("💼 Holdings Report")
@@ -1135,6 +1239,7 @@ elif menu == "Manage Data":
                 save_data(fname, pd.DataFrame()) # Save empty
                 st.error(f"{del_opt} has been wiped.")
                 st.cache_data.clear()
+
 
 
 
