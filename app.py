@@ -413,7 +413,7 @@ def calculate_metrics(units, cost, ltp, change=0):
 # --- NAVIGATION ---
 st.sidebar.title("🚀 NEPSE Terminal")
 menu = st.sidebar.radio("Main Menu", 
-    [ "Dashboard", "Portfolio", "Watchlist", "Add Trade", "Sell Stock", "History", "Wealth Graph", "WACC Projection", "What If Analysis", "Reports", "Manage Data", "Trading Journal", "Risk Manager" ] )
+    [ "Dashboard", "Portfolio", "Watchlist", "Add Trade", "Sell Stock", "History", "Activity Log", "Wealth Graph", "WACC Projection", "What If Analysis", "Reports", "Manage Data", "Trading Journal", "Risk Manager" ] )
 if st.sidebar.button("🔄 Refresh Market Data"):
     refresh_market_cache()
     st.rerun()
@@ -1340,6 +1340,7 @@ elif menu == "Manage Data":
                 save_data(fname, pd.DataFrame()) # Save empty
                 st.error(f"{del_opt} has been wiped.")
                 st.cache_data.clear()
+
 
 
 
