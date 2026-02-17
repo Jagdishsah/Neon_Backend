@@ -1,4 +1,5 @@
 Symbol,Sector,Units,Total_Cost,WACC,Buy_Date,Stop_Loss,Notes
 HBL,Banking,10,1570.0,157.0,2025-07-18,180.0,My First Share as FPO
 ULHC,Hydro,20,9658.89875,482.9449375,2026-01-18,0.0,Sideways Scalping
-NHPC,Hydro,10,2248.8549999999996,224.88549999999995,2026-01-29,0.0,Low Cap and Gamble after 5% Circuit
+NHPC,Hydro,10,2248.855,224.88549999999995,2026-01-29,0.0,Low Cap and Gamble after 5% Circuit
+SGHC,Hydro,10,4372.24125,437.224125,2026-02-10,390.0,TMS 58 accumulation but Was Trap
