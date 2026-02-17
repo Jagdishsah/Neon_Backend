@@ -86,9 +86,11 @@ def get_data(filename):
         return pd.read_csv(StringIO(content.decoded_content.decode("utf-8")))
     except:
         # Define schemas
-        if "portfolio" in filename: cols = ["Symbol", "Sector", "Units", "Total_Cost", "WACC", "Stop_Loss", "Notes"]
+        if "portfolio" in filename: 
+            cols = ["Symbol", "Sector", "Units", "Total_Cost", "WACC", "Buy_Date", "Stop_Loss", "Notes"]
         elif "watchlist" in filename: cols = ["Symbol", "Target", "Remark"]
-        elif "history" in filename: cols = ["Date", "Symbol", "Units", "Buy_Price", "Sell_Price", "Net_PL", "Reason"]
+        elif "history" in filename: 
+            cols = ["Date", "Buy_Date", "Symbol", "Units", "Buy_Price", "Sell_Price", "Invested_Amount", "Received_Amount", "Net_PL", "PL_Pct", "Reason"]
         elif "diary" in filename: cols = ["Date", "Symbol", "Note", "Emotion", "Mistake", "Strategy"]
         elif "cache" in filename: cols = ["Symbol", "LTP", "Change", "High52", "Low52", "LastUpdated"]
         elif "wealth" in filename: cols = ["Date", "Total_Investment", "Current_Value", "Total_PL", "Day_Change", "Sold_Volume"]
@@ -544,18 +546,29 @@ elif menu == "Add Trade":
         sym = c1.text_input("Symbol").upper()
         units = c1.number_input("Units", min_value=1)
         price = c2.number_input("Buy Price", min_value=1.0)
-        sector = c1.text_input("Sector (e.g. Hydro, Banking)")
-        sl = c2.number_input("Stop Loss", 0.0)
-        note = c1.text_input("Note")
+        
+        c3, c4 = st.columns(2)
+        sector = c3.text_input("Sector")
+        # NEW: Buy Date Input
+        buy_dt = c4.date_input("Buy Date")
+        
+        c5, c6 = st.columns(2)
+        sl = c5.number_input("Stop Loss", 0.0)
+        note = c6.text_input("Note")
         
         if st.form_submit_button("Save Trade"):
             port = get_data("portfolio.csv")
             
+            # Migration check: If old portfolio file doesn't have Buy_Date, add it
+            if not port.empty and "Buy_Date" not in port.columns:
+                port["Buy_Date"] = datetime.now().strftime("%Y-%m-%d")
+
             raw = units * price
             comm = get_broker_commission(raw)
             total = raw + comm + DP_CHARGE + (raw * SEBON_FEE)
             
             if not port.empty and sym in port["Symbol"].values:
+                # AVERAGING LOGIC
                 idx = port[port["Symbol"] == sym].index[0]
                 old_u = port.at[idx, "Units"]
                 old_c = port.at[idx, "Total_Cost"]
@@ -563,19 +576,28 @@ elif menu == "Add Trade":
                 port.at[idx, "Units"] = old_u + units
                 port.at[idx, "Total_Cost"] = old_c + total
                 port.at[idx, "WACC"] = (old_c + total) / (old_u + units)
+                
                 if sector: port.at[idx, "Sector"] = sector
                 if sl > 0: port.at[idx, "Stop_Loss"] = sl
-                st.info(f"Averaged {sym} successfully.")
+                # Note: We do NOT update Buy_Date here to preserve the original entry date for tax purposes.
+                
+                st.info(f"Averaged {sym} successfully. Kept original Buy Date: {port.at[idx, 'Buy_Date']}")
             else:
+                # NEW ENTRY LOGIC
                 new = pd.DataFrame([{
-                    "Symbol": sym, "Sector": sector, "Units": units, 
-                    "Total_Cost": total, "WACC": total/units, "Stop_Loss": sl, "Notes": note
+                    "Symbol": sym, 
+                    "Sector": sector, 
+                    "Units": units, 
+                    "Total_Cost": total, 
+                    "WACC": total/units, 
+                    "Buy_Date": str(buy_dt),  # <--- Saving Date Here
+                    "Stop_Loss": sl, 
+                    "Notes": note
                 }])
                 port = pd.concat([port, new], ignore_index=True)
-                st.success(f"Added {sym} to Portfolio.")
+                st.success(f"Added {sym} to Portfolio with date {buy_dt}.")
             
             save_data("portfolio.csv", port)
-
 # ================= SELL STOCK =================
 elif menu == "Sell Stock":
     st.title("💰 Sell Stock")
@@ -584,22 +606,36 @@ elif menu == "Sell Stock":
     if port.empty:
         st.warning("Nothing to sell.")
     else:
+        # Migration check
+        if "Buy_Date" not in port.columns:
+            port["Buy_Date"] = "Unknown"
+
         sel_sym = st.selectbox("Select Stock", port["Symbol"].unique())
         row = port[port["Symbol"] == sel_sym].iloc[0]
         
-        st.info(f"Holding: {row['Units']} units | WACC: {row['WACC']:.2f}")
+        # Display Info
+        st.info(f"Holding: {row['Units']} units | WACC: {row['WACC']:.2f} | Buy Date: {row['Buy_Date']}")
         
         with st.form("sell_form"):
-            u_sell = st.number_input("Units to Sell", 1, int(row['Units']))
-            p_sell = st.number_input("Selling Price", 1.0)
-            is_long = st.checkbox("Long Term (>1 yr)? (5% Tax)")
+            c1, c2 = st.columns(2)
+            u_sell = c1.number_input("Units to Sell", 1, int(row['Units']))
+            p_sell = c2.number_input("Selling Price", 1.0)
             reason = st.text_input("Reason")
             
             if st.form_submit_button("Confirm Sale"):
+                # 1. Calculate Money Flow
                 cost_portion = (row['Total_Cost'] / row['Units']) * u_sell
-                _, net_pl, _, _ = calculate_metrics(u_sell, cost_portion, p_sell)
+                invested_amt = u_sell * row['WACC']
+                received_amt = u_sell * p_sell
                 
-                # Update Portfolio
+                # 2. Calculate Profit/Loss
+                _, net_pl, _, _ = calculate_metrics(u_sell, invested_amt, p_sell)
+                
+                # 3. Calculate % Return
+                # Avoid division by zero
+                pl_pct = (net_pl / invested_amt * 100) if invested_amt > 0 else 0
+                
+                # 4. Update Portfolio
                 if u_sell == row['Units']:
                     port = port[port["Symbol"] != sel_sym]
                 else:
@@ -607,27 +643,34 @@ elif menu == "Sell Stock":
                     port.at[idx, "Units"] -= u_sell
                     port.at[idx, "Total_Cost"] -= cost_portion
                 
-                # Update History
+                # 5. Update History
                 hist = get_data("history.csv")
-                # Update History Record creation
+                
+                # Timezone adjustment (Nepal)
+                sell_date_str = (datetime.utcnow() + pd.Timedelta(hours=5, minutes=45)).strftime("%Y-%m-%d")
+                
                 new_rec = pd.DataFrame([{
-                    "Date": (datetime.utcnow() + pd.Timedelta(hours=5, minutes=45)).strftime("%Y-%m-%d"),
+                    "Date": sell_date_str,          # Sell Date
+                    "Buy_Date": row['Buy_Date'],    # <--- Fetched from Portfolio
                     "Symbol": sel_sym, 
                     "Units": u_sell, 
-                    "Buy_Price": row['WACC'],  # <--- NEW FIELD ADDED
+                    "Buy_Price": row['WACC'], 
                     "Sell_Price": p_sell,
-                    "Net_PL": net_pl, 
+                    "Invested_Amount": round(invested_amt, 2),
+                    "Received_Amount": round(received_amt, 2),
+                    "Net_PL": round(net_pl, 2), 
+                    "PL_Pct": round(pl_pct, 2),     # <--- Stored %
                     "Reason": reason
                 }])
+                
                 hist = pd.concat([hist, new_rec], ignore_index=True)
                 
                 save_data("portfolio.csv", port)
                 save_data("history.csv", hist)
-                st.success(f"Sold! Net Profit: Rs {net_pl:.2f}")
+                st.success(f"Sold! Net Profit: Rs {net_pl:.2f} ({pl_pct:.2f}%)")
                 st.balloons()
 
-# ================= HISTORY TAB (NEW) =================
-# ================= HISTORY (INTELLIGENT) =================
+# ================= HISTORY =================
 elif menu == "History":
     st.title("📜 Trade Intelligence")
     hist = get_data("history.csv")
@@ -635,46 +678,55 @@ elif menu == "History":
     if hist.empty:
         st.info("No transaction history found.")
     else:
-        # --- INTELLIGENCE ENGINE ---
+        # --- MIGRATION/COMPATIBILITY ---
+        # Ensure new columns exist in dataframe even if reading old file
+        required_cols = ["Invested_Amount", "Received_Amount", "Buy_Date", "PL_Pct"]
+        for col in required_cols:
+            if col not in hist.columns:
+                hist[col] = 0 if col != "Buy_Date" else "-"
+        
+        # Recalculate P/L Pct for old records if missing
+        for i, row in hist.iterrows():
+            if row["PL_Pct"] == 0 and row["Invested_Amount"] == 0 and row["Buy_Price"] > 0:
+                 inv = row["Units"] * row["Buy_Price"]
+                 hist.at[i, "Invested_Amount"] = inv
+                 hist.at[i, "Received_Amount"] = row["Units"] * row["Sell_Price"]
+                 if inv > 0:
+                    hist.at[i, "PL_Pct"] = (row["Net_PL"] / inv) * 100
+
+        # --- METRICS ---
         total_trades = len(hist)
         wins = hist[hist["Net_PL"] > 0]
         losses = hist[hist["Net_PL"] <= 0]
         
-        win_rate = (len(wins) / total_trades) * 100
-        total_profit = wins["Net_PL"].sum()
+        win_rate = (len(wins) / total_trades) * 100 if total_trades > 0 else 0
         total_loss = abs(losses["Net_PL"].sum())
+        profit_factor = wins["Net_PL"].sum() / total_loss if total_loss > 0 else wins["Net_PL"].sum()
         
-        # Profit Factor (Avoid division by zero)
-        profit_factor = total_profit / total_loss if total_loss > 0 else total_profit
-        
-        best_trade = hist.loc[hist["Net_PL"].idxmax()] if not hist.empty else None
-        worst_trade = hist.loc[hist["Net_PL"].idxmin()] if not hist.empty else None
-
-        # --- KPI CARDS ---
         k1, k2, k3, k4 = st.columns(4)
-        k1.metric("Win Rate", f"{win_rate:.1f}%", help="% of trades that were profitable")
-        k2.metric("Profit Factor", f"{profit_factor:.2f}", help="Gross Profit / Gross Loss ( > 1.5 is Good)")
-        k3.metric("Avg Profit/Trade", f"Rs {hist['Net_PL'].mean():.0f}")
-        k4.metric("Net Realized P/L", f"Rs {hist['Net_PL'].sum():,.2f}", delta_color="normal")
+        k1.metric("Win Rate", f"{win_rate:.1f}%")
+        k2.metric("Profit Factor", f"{profit_factor:.2f}")
+        k3.metric("Total Invested", f"Rs {hist['Invested_Amount'].sum():,.0f}")
+        k4.metric("Net Realized P/L", f"Rs {hist['Net_PL'].sum():,.2f}")
         
         st.markdown("---")
         
-        # --- HALL OF FAME ---
-        c1, c2 = st.columns(2)
-        with c1:
-            st.success(f"🏆 **Best Trade:** {best_trade['Symbol']} (+Rs {best_trade['Net_PL']:,.0f})")
-        with c2:
-            st.error(f"💀 **Worst Trade:** {worst_trade['Symbol']} ({worst_trade['Net_PL']:,.0f})")
-
-        # --- DATA TABLE ---
+        # --- TABLE DISPLAY ---
         st.markdown("### Transaction Log")
-        # Ensure compatibility
-        if "Buy_Price" not in hist.columns: hist["Buy_Price"] = 0.0
-            
+        
+        # Column Order
+        disp_cols = ["Date", "Buy_Date", "Symbol", "Units", "Buy_Price", "Sell_Price", "Invested_Amount", "Received_Amount", "Net_PL", "PL_Pct", "Reason"]
+        final_cols = [c for c in disp_cols if c in hist.columns]
+        
         st.dataframe(
-            hist.style.format({
-                "Buy_Price": "{:,.2f}", "Sell_Price": "{:,.2f}", "Net_PL": "{:,.2f}"
-            }).background_gradient(subset=["Net_PL"], cmap="RdYlGn", vmin=-5000, vmax=5000),
+            hist[final_cols].style.format({
+                "Buy_Price": "{:,.1f}", 
+                "Sell_Price": "{:,.1f}", 
+                "Invested_Amount": "{:,.0f}",
+                "Received_Amount": "{:,.0f}",
+                "Net_PL": "{:,.0f}",
+                "PL_Pct": "{:.2f}%"
+            }).background_gradient(subset=["Net_PL", "PL_Pct"], cmap="RdYlGn", vmin=-20, vmax=20),
             use_container_width=True, hide_index=True
         )
 # ================= WACC PROJECTION (NEW) =================
@@ -1040,6 +1092,7 @@ elif menu == "Manage Data":
                 save_data(fname, pd.DataFrame()) # Save empty
                 st.error(f"{del_opt} has been wiped.")
                 st.cache_data.clear()
+
 
 
 
