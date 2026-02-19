@@ -7,6 +7,7 @@ from io import StringIO
 import plotly.express as px
 from datetime import datetime
 import time
+from scrape import get_market_data
 
 # --- CONFIGURATION ---
 st.set_page_config(page_title="NEPSE Pro Terminal", page_icon="📈", layout="wide")
@@ -120,37 +121,7 @@ def save_data(filename, df):
         st.error(f"Save Failed: {e}")
         return False
 
-# --- MARKET ENGINE ---
-def fetch_live_single(symbol):
-    url = f"https://merolagani.com/CompanyDetail.aspx?symbol={symbol}"
-    headers = {'User-Agent': 'Mozilla/5.0'}
-    data = {'price': 0.0, 'change': 0.0, 'high': 0.0, 'low': 0.0}
-    
-    try:
-        response = requests.get(url, headers=headers, timeout=5)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # LTP
-        price_tag = soup.select_one("#ctl00_ContentPlaceHolder1_CompanyDetail1_lblMarketPrice")
-        if price_tag: data['price'] = float(price_tag.text.strip().replace(",", ""))
-        
-        # Change & 52W
-        for row in soup.find_all('tr'):
-            text = row.text.strip()
-            if "52 Weeks High - Low" in text:
-                tds = row.find_all('td')
-                if tds:
-                    nums = tds[-1].text.split("-")
-                    if len(nums) == 2:
-                        data['high'] = float(nums[0].strip().replace(",", ""))
-                        data['low'] = float(nums[1].strip().replace(",", ""))
-            if "Change" in text and "%" not in text: 
-                tds = row.find_all('td')
-                if tds:
-                    try: data['change'] = float(tds[-1].text.strip().replace(",", ""))
-                    except: pass
-    except: pass
-    return data
+
 
 def update_wealth_log(port, cache):
     """Calculates daily snapshot and saves to wealth.csv"""
@@ -270,7 +241,7 @@ def refresh_market_cache():
     port = get_data("portfolio.csv")
     watch = get_data("watchlist.csv")
     price_log = get_data("price_log.csv")
-    hist = get_data("history.csv")  # <--- WAS MISSING
+    hist = get_data("history.csv") 
     
     symbols = set(port["Symbol"].tolist() + watch["Symbol"].tolist())
     
@@ -279,14 +250,19 @@ def refresh_market_cache():
     cache_list = []
     new_log_entries = []
     
-    progress = st.progress(0, "Connecting to Market...")
+    progress = st.progress(0, "Connecting to High-Speed API...")
     
     # Nepal Time
     now_str = (datetime.utcnow() + pd.Timedelta(hours=5, minutes=45)).strftime("%Y-%m-%d %H:%M")
     
+    # --- FETCH EVERYTHING ONCE VIA API ---
+    market_data = get_market_data(list(symbols))
+    
     for i, sym in enumerate(symbols):
-        progress.progress((i+1)/len(symbols), f"Fetching {sym}...")
-        live = fetch_live_single(sym)
+        progress.progress((i+1)/len(symbols), f"Processing {sym}...")
+        
+        # Get data from our dictionary instead of scraping 
+        live = market_data.get(sym, {'price': 0.0, 'change': 0.0, 'high': 0.0, 'low': 0.0})
         current_ltp = live['price']
         
         # --- SMART CHANGE LOGIC ---
@@ -335,7 +311,6 @@ def refresh_market_cache():
             "Low52": live['low'],
             "LastUpdated": now_str
         })
-        time.sleep(0.1)
         
     progress.empty()
     
@@ -351,9 +326,9 @@ def refresh_market_cache():
     
     # 4. Update Background Logs
     update_wealth_log(port, new_cache)       # Tracks Total Net Worth
-    update_data_log(port, hist, new_cache)   # <--- WAS MISSING (Tracks P/L %)
+    update_data_log(port, hist, new_cache)   # Tracks P/L %
     
-    st.toast("Market Data & Logs Updated!", icon="✅")
+    st.toast("⚡ Market Data synced via API!", icon="✅")
     st.cache_data.clear()
 
 # --- CALCULATORS ---
@@ -1340,6 +1315,7 @@ elif menu == "Manage Data":
         if st.button("Save Log Changes"):
             save_data("activity_log.csv", edit_log)
             st.success("Logs Saved.")
+
 
 
 
