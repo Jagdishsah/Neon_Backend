@@ -579,32 +579,44 @@ elif menu == "My TMS":
             trx_df["Date"] = pd.to_datetime(trx_df["Date"])
             
             # --- 1. CORE FINANCIAL CALCULATIONS ---
-            # Exclude Collateral from Net Cash Balance
-            is_collat = (trx_df["Medium"].astype(str).str.upper() == "COLLATERAL") | (trx_df["Type"].astype(str).str.upper() == "COLLATERAL LOAD")
-            real_cash_df = trx_df[~is_collat]
-            collat_df = trx_df[is_collat]
+            # Define logic for Cash Flow (Excluding Collateral movements)
+            is_collateral_entry = (trx_df["Medium"].astype(str).str.upper() == "COLLATERAL") | \
+                                 (trx_df["Type"].astype(str).str.upper() == "COLLATERAL LOAD")
             
+            real_cash_df = trx_df[~is_collateral_entry]
+            
+            # Real Cash In: Deposits + Sales
             cash_in = real_cash_df[real_cash_df["Amount"] > 0]["Amount"].sum()
+            # Real Cash Out: Withdraws + Buys + Fines (Convert to positive for display)
             cash_out = abs(real_cash_df[real_cash_df["Amount"] < 0]["Amount"].sum())
+            
             total_charges = trx_df["Charge"].sum()
-            total_fines = abs(trx_df[trx_df["Type"].astype(str).str.upper() == "FINE"]["Amount"].sum())
             
-            # Net Balance is ONLY real cash moving in/out minus fees
-            net_balance = real_cash_df["Amount"].sum() - total_charges
+            # Net Balance = Total Cash In - Total Cash Out - Fees
+            net_balance = (cash_in - cash_out) - total_charges
             
-            # Buying Power Logic (Broker Limit = Collateral * 4 usually)
+            # Buying Power Logic
+            # Base Collateral = 10,824. Buying Power = (Collateral * 4) + Net Balance
             base_free_collateral = 10824.0
-            loaded_collateral = collat_df["Amount"].sum()
+            # Include any 'Collateral Load' transactions added by user
+            loaded_collateral = trx_df[trx_df["Type"].astype(str).str.upper() == "COLLATERAL LOAD"]["Amount"].sum()
             total_collateral = base_free_collateral + loaded_collateral
-            # Limit = (Collateral * 4) + Net Cash Balance
+            
+            # Final Buying Power Calculation
             buying_power = (total_collateral * 4) + net_balance 
             
             # --- UI: MAIN METRICS ---
             c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Net Balance", f"Rs {net_balance:,.0f}", delta="Deficit" if net_balance < 0 else "Surplus", delta_color="inverse" if net_balance < 0 else "normal")
-            c2.metric("🔋 Buying Power", f"Rs {buying_power:,.0f}", help=f"Based on Rs {total_collateral:,.0f} collateral (4x) + Net Balance")
-            c3.metric("Real Cash In", f"Rs {cash_in:,.0f}", help="Excludes Collateral")
-            c4.metric("Charges & Fines", f"Rs {total_charges + total_fines:,.0f}")
+            c1.metric("Net Balance", f"Rs {net_balance:,.0f}", 
+                      delta="Deficit" if net_balance < 0 else "Surplus", 
+                      delta_color="inverse" if net_balance < 0 else "normal")
+            
+            # Highlight Buying Power in Green if positive, Red if used up
+            c2.metric("🔋 Buying Power", f"Rs {buying_power:,.0f}", 
+                      help=f"Calculation: (Rs {total_collateral:,.0f} Collateral x 4) + (Rs {net_balance:,.0f} Cash Balance)")
+            
+            c3.metric("Real Cash Out", f"Rs {cash_out:,.0f}", help="Sum of Buys, Withdrawals, and Fines")
+            c4.metric("Real Cash In", f"Rs {cash_in:,.0f}", help="Sum of Deposits and Sales")
             
             st.markdown("---")
             
@@ -614,69 +626,46 @@ elif menu == "My TMS":
             with r1:
                 st.markdown("#### 🚨 Account Alerts")
                 if net_balance < 0:
-                    daily_df = real_cash_df.groupby("Date").agg({"Amount": "sum", "Charge": "sum"}).reset_index()
-                    daily_df["Daily_Net"] = daily_df["Amount"] - daily_df["Charge"]
-                    daily_df = daily_df.sort_values("Date")
-                    daily_df["Running_Balance"] = daily_df["Daily_Net"].cumsum()
-                    
-                    last_positive_date = daily_df[daily_df["Running_Balance"] >= 0]["Date"].max()
                     today = pd.to_datetime(datetime.now().date())
+                    # Check how long it has been negative
+                    daily_bal = real_cash_df.groupby("Date")["Amount"].sum().cumsum()
+                    neg_days = (today - daily_bal[daily_bal < 0].index.min()).days if not daily_bal[daily_bal < 0].empty else 0
                     
-                    if pd.isna(last_positive_date): first_negative_date = daily_df["Date"].min()
+                    if neg_days >= 2:
+                        st.error(f"🔥 **CRITICAL T+2:** Negative for {neg_days} days! Deposit Rs {abs(net_balance):,.0f} now.")
                     else:
-                        streak_df = daily_df[daily_df["Date"] > last_positive_date]
-                        first_negative_date = streak_df["Date"].min() if not streak_df.empty else today
-                    
-                    days_negative = (today - first_negative_date).days
-                    
-                    if days_negative >= 2:
-                        st.error(f"🔥 **CRITICAL:** Negative balance (Rs {net_balance:,.2f}) for **{days_negative} days**! 20% fine risk.")
-                    else:
-                        st.warning(f"⚠️ **Notice:** Net Balance is negative (Rs {net_balance:,.2f}). Settle T+2 soon.")
+                        st.warning(f"⚠️ **Notice:** Negative Balance (Rs {net_balance:,.2f}). Settle within 2 days.")
                 else:
                     st.success("✅ Account settled. No pending deficits.")
 
             with r2:
                 st.markdown("#### 📡 Upcoming Payout Radar")
-                # NEPSE T+3 Payout Logic (Skips Fri & Sat)
                 def get_payout_date(sell_date):
-                    days_added = 0
-                    current = sell_date
+                    days_added, current = 0, sell_date
                     while days_added < 3:
                         current += pd.Timedelta(days=1)
-                        if current.weekday() not in [4, 5]: # 4=Fri, 5=Sat
-                            days_added += 1
+                        if current.weekday() not in [4, 5]: days_added += 1 # Skip Fri/Sat
                     return current
                 
-                sells_df = trx_df[trx_df["Type"].astype(str).str.upper() == "SELL"].copy()
-                if not sells_df.empty:
-                    sells_df["Payout_Date"] = sells_df["Date"].apply(get_payout_date)
-                    today = pd.to_datetime(datetime.now().date())
-                    pending_payouts = sells_df[sells_df["Payout_Date"] >= today].copy()
-                    
-                    if not pending_payouts.empty:
-                        for _, row in pending_payouts.iterrows():
-                            days_left = (row["Payout_Date"] - today).days
-                            day_name = row["Payout_Date"].strftime("%A")
-                            label = f"Tomorrow" if days_left == 1 else f"On {day_name}" if days_left > 0 else "Today!"
-                            st.info(f"💸 **Rs {row['Amount']:,.2f}** expected **{label}** (Sold {row['Stock']})")
-                    else:
-                        st.write("No pending payouts from recent sells.")
-                else:
-                    st.write("No recent sell transactions.")
+                sells = trx_df[trx_df["Type"].astype(str).str.upper() == "SELL"].copy()
+                if not sells.empty:
+                    sells["Payout"] = sells["Date"].apply(get_payout_date)
+                    pending = sells[sells["Payout"] >= pd.to_datetime(datetime.now().date())]
+                    if not pending.empty:
+                        for _, row in pending.iterrows():
+                            st.info(f"💸 **Rs {row['Amount']:,.0f}** due {row['Payout'].strftime('%A')} (from {row['Stock']})")
+                    else: st.write("No pending payouts.")
+                else: st.write("No recent sells.")
                     
             st.markdown("---")
             
-            # --- 3. RECENT ACTIVITY MINIFEED ---
+            # --- 3. RECENT ACTIVITY ---
             st.markdown("#### 🕒 Recent Activity")
-            recent_df = trx_df.sort_values(by="Date", ascending=False).head(5)
-            # Clean up display columns
-            display_df = recent_df[["Date", "Type", "Stock", "Amount", "Medium"]].copy()
-            display_df["Date"] = display_df["Date"].dt.strftime('%Y-%m-%d')
-            st.dataframe(display_df, use_container_width=True, hide_index=True)
+            st.dataframe(trx_df.sort_values("Date", ascending=False).head(5)[["Date", "Type", "Stock", "Amount", "Medium"]], 
+                         use_container_width=True, hide_index=True)
                 
         else:
-            st.info("No transaction data yet. Go to 'Add Transactions' to begin.")
+            st.info("No transaction data yet.")
 
     # --- TAB 2: ADD TRANSACTIONS ---
     with tms_tabs[1]:
@@ -1805,6 +1794,7 @@ elif menu == "Manage Data":
         if st.button("Save Log Changes"):
             save_data("activity_log.csv", edit_log)
             st.success("Logs Saved.")
+
 
 
 
