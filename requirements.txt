@@ -8,3 +8,4 @@ PyGithub
 plotly
 matplotlib
 fpdf
+pymongo[srv]
