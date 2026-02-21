@@ -88,7 +88,9 @@ def get_data(filename):
     try:
         content = repo.get_contents(filename)
         return pd.read_csv(StringIO(content.decoded_content.decode("utf-8")))
-    except:
+    except Exception as e:
+        if filename != "error_log.csv":
+            log_error(f"get_data: {filename}", str(e))
         # Define schemas
         if "portfolio" in filename: 
             cols = ["Symbol", "Sector", "Units", "Total_Cost", "WACC", "Buy_Date", "Stop_Loss", "Notes"]
@@ -117,17 +119,12 @@ def get_data(filename):
         elif "price_log" in filename: cols = ["Date", "Symbol", "LTP"]
         elif "Data" in filename: cols = ["Date", "Realized_PL", "Realized_PL_Pct", "Unrealized_PL", "Unrealized_PL_Pct"]
         
-        # 👇 NEW TMS SCHEMA 👇
+        
         elif "tms_trx" in filename:
             cols = ["Date", "Stock", "Type", "Medium", "Amount", "Charge", "Remark", "Reference"]
-        # 👆 NEW TMS SCHEMA 👆
         
-        
-        # 👆 NEW TMS SCHEMAS 👆
         else: cols = []
-            except Exception as e:
-        if filename != "error_log.csv":
-            log_error(f"get_data: {filename}", str(e))
+            
         return pd.DataFrame(columns=cols)
 
 def save_data(filename, df):
@@ -1846,6 +1843,7 @@ elif menu == "Manage Data":
                     st.rerun()
         except Exception:
             st.success("System is running perfectly! No errors logged. 🎉")
+
 
 
 
