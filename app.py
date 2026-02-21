@@ -612,7 +612,7 @@ elif menu == "My TMS":
                       delta_color="inverse" if net_balance < 0 else "normal")
             
             # Highlight Buying Power in Green if positive, Red if used up
-            c2.metric("🔋 Buying Power", f"Rs {buying_power:,.0f}", 
+            c2.metric("🔋 Buying Power", f"Rs {buying_power:,.0f}") 
                    
             
             c3.metric("Real Cash Out", f"Rs {cash_out:,.0f}", help="Sum of Withdrawals")
@@ -1794,6 +1794,7 @@ elif menu == "Manage Data":
         if st.button("Save Log Changes"):
             save_data("activity_log.csv", edit_log)
             st.success("Logs Saved.")
+
 
 
 
