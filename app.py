@@ -603,7 +603,7 @@ elif menu == "My TMS":
             total_collateral = base_free_collateral + loaded_collateral
             
             # Final Buying Power Calculation
-            buying_power = (total_collateral) + net_balance 
+            buying_power = (total_collateral) 
             
             # --- UI: MAIN METRICS ---
             c1, c2, c3, c4 = st.columns(4)
@@ -1794,6 +1794,7 @@ elif menu == "Manage Data":
         if st.button("Save Log Changes"):
             save_data("activity_log.csv", edit_log)
             st.success("Logs Saved.")
+
 
 
 
