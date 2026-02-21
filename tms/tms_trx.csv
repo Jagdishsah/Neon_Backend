@@ -4,3 +4,4 @@ Date,Stock,Type,Medium,Amount,Charge,Remark,Reference
 2026-01-20,TPC*10,Buy,Collateral,-3759.95,0.0,Buy TPC With Long Term Trend,TMS 2026012005031079
 2026-01-29,[KKHC+NHPC]*20,Buy,Collateral,-9501.25,0.0,Circuit Chase,TMS 2026012005031079
 2026-01-29,,Deposit,CIPS,7000.0,8.0,Depo For NHPC KKHC,587404287
+2026-01-29,TPC*10,Sell,Collateral,3820.59,0.0,Sold TPC at Just Above BE,TMS 2026012905016435
