@@ -2,3 +2,4 @@ Date,Stock,Type,Medium,Amount,Charge,Remark,Reference
 2026-01-08,,Deposit,CIPS,10824.21,8.0,My First Collateral For TMS,568832045
 2026-01-18,ULHC*10,Buy,Collateral,-4544.89,0.0,Buy ULHC For Sideway Scalping,TMS 2026011805015368
 2026-01-20,TPC*10,Buy,Collateral,-3759.95,0.0,Buy TPC With Long Term Trend,TMS 2026012005031079
+2026-01-29,[KKHC+NHPC]*20,Buy,Collateral,-9501.25,0.0,Circuit Chase,TMS 2026012005031079
