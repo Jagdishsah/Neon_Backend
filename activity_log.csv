@@ -1,4 +1,5 @@
 Timestamp,Category,Symbol,Action,Details,Amount
+2026-02-21 08:52:33,TMS,SGHC * 10,ADD,Recorded Buy via Collateral,-4372.24
 2026-02-21 08:51:30,TMS,NHPC * 10,ADD,Recorded Sell via Collateral,2177.67
 2026-02-21 08:50:28,TMS,KKHC*20,ADD,Recorded Sell via Collateral,4916.4
 2026-02-21 08:48:51,TMS,,ADD,Recorded Deposit via Global,1293.42
