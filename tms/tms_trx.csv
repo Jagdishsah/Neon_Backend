@@ -6,3 +6,4 @@ Date,Stock,Type,Medium,Amount,Charge,Remark,Reference
 2026-01-29,,Deposit,CIPS,7000.0,8.0,Depo For NHPC KKHC,587404287
 2026-01-29,TPC*10,Sell,Collateral,3820.59,0.0,Sold TPC at Just Above BE,TMS 2026012905016435
 2026-02-04,,Withdraw,Nabil,-3820.59,10.0,TPC Capital Withdraw,
+2026-02-04,ULHC*10,Buy,Collateral,-5114.01,0.0,TMS 58 Continous Accumulation,
