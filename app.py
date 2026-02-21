@@ -605,49 +605,80 @@ elif menu == "My TMS":
             date = c1.date_input("Date", datetime.now().date())
             stock = c2.text_input("Stock Symbol (Optional)", placeholder="e.g. NABIL").upper()
             
-            # --- UPDATED: Dynamic Type Selection ---
-            type_sel = c3.selectbox("Transaction Type", ["IPO", "Buy", "Sell", "Deposit", "Withdraw", "Fine", "Other"])
-            # If 'Other' is selected, show a text input to specify it. Otherwise, use the selected value.
-            trx_type = st.text_input("Specify Other Type", placeholder="Type custom transaction type here...") if type_sel == "Other" else type_sel
+            # Type Selection
+            type_sel = c3.selectbox(
+                "Transaction Type", 
+                ["Buy", "Sell", "Deposit", "Withdraw", "Fine", "IPO", "Other"]
+            )
+            trx_type = st.text_input("Specify Other Type") if type_sel == "Other" else type_sel
                 
             c4, c5, c6 = st.columns(3)
             
-            # --- UPDATED: Dynamic Medium Selection (Added Collateral) ---
-            med_sel = c4.selectbox("Medium", ["Nabil", "Global", "Esewa", "CIPS", "Khalti", "Collateral", "Other"])
-            # If 'Other' is selected, show a text input to specify it. Otherwise, use the selected value.
-            medium = st.text_input("Specify Other Medium", placeholder="Type custom medium here...") if med_sel == "Other" else med_sel
+            # Medium Selection
+            med_sel = c4.selectbox(
+                "Medium", 
+                ["Nabil", "Global", "Esewa", "CIPS", "Khalti", "Collateral", "Other"]
+            )
+            medium = st.text_input("Specify Other Medium") if med_sel == "Other" else med_sel
                 
-            # Financials
-            amount = c5.number_input("Amount (Use + for IN, - for OUT)", value=0.0, help="+ for Deposit/Sell, - for Withdraw/Buy")
-            charge = c6.number_input("Charge / Fee", min_value=0.0, value=0.0, help="DP charges or transfer fees")
+            # Financials (User only inputs positive absolute value now)
+            amount_input = c5.number_input(
+                "Amount (Rs)", 
+                min_value=0.0, 
+                value=0.0, 
+                help="Type the absolute amount. We will auto-apply + or - based on the Transaction Type."
+            )
+            
+            # Direction toggle for ambiguous transactions (like IPO or custom Other)
+            direction = c6.selectbox(
+                "Flow Direction (For IPO/Other)", 
+                ["Auto", "Inflow to TMS (+)", "Outflow from TMS (-)"], 
+                help="Only matters if Type is 'IPO' or 'Other'."
+            )
             
             c7, c8 = st.columns(2)
-            remark = c7.text_input("Remark", placeholder="e.g. Transferred for today's buy")
-            ref = c8.text_input("Reference / Txn ID", placeholder="e.g. ConnectIPS ID")
+            charge = c7.number_input("Charge / Fee", min_value=0.0, value=0.0)
+            remark = c8.text_input("Remark")
+            
+            ref = st.text_input("Reference / Txn ID", placeholder="e.g. ConnectIPS ID")
             
             st.markdown("---")
             confirm = st.checkbox("I confirm the details above are correct.")
             
             if st.form_submit_button("💾 Save Transaction"):
-                # Make sure the user didn't leave the "Other" specify box blank
+                # 1. Error Checking
                 if type_sel == "Other" and not trx_type.strip():
                     st.error("❌ Please specify the custom Transaction Type.")
                 elif med_sel == "Other" and not medium.strip():
                     st.error("❌ Please specify the custom Medium.")
-                elif amount == 0:
+                elif amount_input == 0:
                     st.error("❌ Amount cannot be 0.")
                 elif confirm:
+                    
+                    # 2. AUTO SIGN CALCULATION MAGIC
+                    if type_sel in ["Buy", "Withdraw", "Fine"]:
+                        final_amount = -abs(amount_input)
+                    elif type_sel in ["Sell", "Deposit"]:
+                        final_amount = abs(amount_input)
+                    else:
+                        # Fallback for IPO or Custom types based on user selection
+                        if direction == "Outflow from TMS (-)":
+                            final_amount = -abs(amount_input)
+                        else:
+                            final_amount = abs(amount_input)
+                            
+                    # 3. Save Data
                     new_trx = pd.DataFrame([{
                         "Date": date, "Stock": stock, "Type": trx_type, 
-                        "Medium": medium, "Amount": amount, "Charge": charge, 
+                        "Medium": medium, "Amount": final_amount, "Charge": charge, 
                         "Remark": remark, "Reference": ref
                     }])
                     
-                    # Fetch, Append, and Save
                     trx_df = get_data("tms/tms_trx.csv")
                     trx_df = pd.concat([trx_df, new_trx], ignore_index=True)
                     save_data("tms/tms_trx.csv", trx_df)
-                    st.success(f"✅ Transaction Saved Successfully!")
+                    
+                    st.success(f"✅ Saved! Recorded Rs {final_amount:,.2f} to the ledger.")
                 else:
                     st.warning("⚠️ Please check the confirmation box before saving.")
 
@@ -1630,6 +1661,7 @@ elif menu == "Manage Data":
         if st.button("Save Log Changes"):
             save_data("activity_log.csv", edit_log)
             st.success("Logs Saved.")
+
 
 
 
