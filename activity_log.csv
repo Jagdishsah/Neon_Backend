@@ -1,5 +1,6 @@
 Timestamp,Category,Symbol,Action,Details,Amount
-2026-02-21 08:48:51,TMS,N/A,ADD,Recorded Deposit via Global,1293.42
+2026-02-21 08:50:28,TMS,KKHC*20,ADD,Recorded Sell via Collateral,4916.4
+2026-02-21 08:48:51,TMS,,ADD,Recorded Deposit via Global,1293.42
 2026-02-21 08:47:15,TMS,ULHC*10,ADD,Recorded Buy via Collateral,-5114.01
 2025-07-18 11:00:00,TRADE,HBL,BUY,Added 10 units (Notes: My First Share as FPO),-1570.0
 2025-07-31 10:00:00,TRADE,DHEL,BUY,Bought 10 units (Closed later),-1000.0
