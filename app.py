@@ -81,7 +81,7 @@ def get_repo():
     except:
         st.error("❌ GitHub Connection Failed. Check Secrets.")
         return None
-
+@st.cache_data(ttl=300) 
 def get_data(filename):
     repo = get_repo()
     if not repo: return pd.DataFrame()
@@ -1843,6 +1843,7 @@ elif menu == "Manage Data":
                     st.rerun()
         except Exception:
             st.success("System is running perfectly! No errors logged. 🎉")
+
 
 
 
