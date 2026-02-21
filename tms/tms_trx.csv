@@ -8,3 +8,4 @@ Date,Stock,Type,Medium,Amount,Charge,Remark,Reference
 2026-02-04,,Withdraw,Nabil,-3820.59,10.0,TPC Capital Withdraw,
 2026-02-04,ULHC*10,Buy,Collateral,-5114.01,0.0,TMS 58 Continous Accumulation,
 2026-02-04,,Deposit,Global,1293.42,0.0,Payment For ULHC,WWKXGFPTX19
+2026-02-05,KKHC*20,Sell,Collateral,4916.4,0.0,Sell KKHC Near BE Without Realizing Circuit {Scary Cat Effect},
