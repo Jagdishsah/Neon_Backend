@@ -8,6 +8,7 @@ import plotly.express as px
 from datetime import datetime
 import time
 from scrape import get_market_data
+import plotly.graph_objects as go
 
 # --- CONFIGURATION ---
 st.set_page_config(page_title="NEPSE Pro Terminal", page_icon="📈", layout="wide")
@@ -109,6 +110,17 @@ def get_data(filename):
             cols = ["Date", "Type", "Category", "Amount", "Status", "Due_Date", "Ref_ID", "Description", "Is_Non_Cash", "Dispute_Note", "Fiscal_Year"]
         elif "tms_holdings" in filename:
             cols = ["Symbol", "Total_Qty", "Pledged_Qty", "LTP", "Haircut"]
+
+        elif "wealth" in filename: cols = ["Date", "Total_Investment", "Current_Value", "Total_PL", "Day_Change", "Sold_Volume"]
+        elif "price_log" in filename: cols = ["Date", "Symbol", "LTP"]
+        elif "Data" in filename: cols = ["Date", "Realized_PL", "Realized_PL_Pct", "Unrealized_PL", "Unrealized_PL_Pct"]
+        
+        # 👇 NEW TMS SCHEMA 👇
+        elif "tms_trx" in filename:
+            cols = ["Date", "Stock", "Type", "Medium", "Amount", "Charge", "Remark", "Reference"]
+        # 👆 NEW TMS SCHEMA 👆
+        
+        
         # 👆 NEW TMS SCHEMAS 👆
         else: cols = []
         return pd.DataFrame(columns=cols)
@@ -553,135 +565,285 @@ elif menu == "Dashboard":
 # ================= MY TMS =================
 elif menu == "My TMS":
     st.title("🏦 TMS Command Center")
-    st.caption("Central hub for Broker Ledger, Collateral, and T+2 Settlements")
+    st.caption("Central hub for Broker Ledger, Cash Flows, and T+2 Settlements")
 
     # Creating the Nested Tabs
-    tms_tabs = st.tabs(["📊 Dashboard", "✍️ Add Transactions", "📜 View Transactions", "🛠️ Manage Data (Admin)", "⬇️ Export", "📈 Smart Graph"])
+    tms_tabs = st.tabs(["📊 Dashboard", "✍️ Add Transactions", "📜 View Transactions", "🛠️ Manage Data", "⬇️ Export", "📈 Smart Graph"])
     
     # --- TAB 1: THE DASHBOARD ---
     with tms_tabs[0]:
-        st.subheader("📡 Solvency & T+2 Settlement Radar")
+        st.subheader("💸 TMS Cash Flow Summary")
+        trx_df = get_data("tms/tms_trx.csv")
         
-        # Load TMS Data from the 'tms' folder
-        tms_df = get_data("tms/tms_ledger_master.csv")
-        holdings_df = get_data("tms/tms_holdings.csv")
-        
-        # Dashboard Engine Calculations
-        tms_cash_balance = 0.0
-        t0_due, t1_due, t2_due = 0.0, 0.0, 0.0
-        trading_power = 0.0
-        utilization_rate = 0.0
-        net_due = 0.0
-        payable_due = 0.0
-        receivable_due = 0.0
-        
-        if not tms_df.empty:
-            # Bank & Cash Balance Logic
-            tms_credits = tms_df[tms_df["Category"].isin(["DEPOSIT", "RECEIVABLE", "DIRECT_PAY"])]["Amount"].sum()
-            tms_debits = tms_df[tms_df["Category"].isin(["WITHDRAW", "PAYABLE", "EXPENSE"])]["Amount"].sum()
-            tms_cash_balance = tms_credits - tms_debits
+        if not trx_df.empty:
+            # Metric Calculations
+            cash_in = trx_df[trx_df["Amount"] > 0]["Amount"].sum()
+            cash_out = abs(trx_df[trx_df["Amount"] < 0]["Amount"].sum())
+            net_cash = trx_df["Amount"].sum()
+            total_charges = trx_df["Charge"].sum()
             
-            # Settlement / Radar Logic
-            pending_df = tms_df[tms_df["Status"] == "Pending"].copy()
-            if not pending_df.empty:
-                payable_due = pending_df[pending_df["Category"] == "PAYABLE"]["Amount"].sum()
-                receivable_due = pending_df[pending_df["Category"] == "RECEIVABLE"]["Amount"].sum()
-                net_due = payable_due - receivable_due
-                
-                # Filter dues by exact days
-                today = pd.to_datetime(datetime.now().date())
-                pending_df["Due_Date"] = pd.to_datetime(pending_df["Due_Date"])
-                
-                t0_df = pending_df[pending_df["Due_Date"] <= today]
-                t1_df = pending_df[pending_df["Due_Date"] == today + pd.Timedelta(days=1)]
-                t2_df = pending_df[pending_df["Due_Date"] >= today + pd.Timedelta(days=2)]
-                
-                calc_net = lambda d: d[d["Category"]=="RECEIVABLE"]["Amount"].sum() - d[d["Category"]=="PAYABLE"]["Amount"].sum()
-                t0_due = calc_net(t0_df)
-                t1_due = calc_net(t1_df)
-                t2_due = calc_net(t2_df)
-                
-        # Non-Cash Collateral Logic
-        non_cash_value = 0.0
-        if not holdings_df.empty:
-            holdings_df["Collateral_Val"] = holdings_df["Pledged_Qty"] * holdings_df["LTP"] * (1 - (holdings_df["Haircut"]/100))
-            non_cash_value = holdings_df["Collateral_Val"].sum()
-        
-        # Limit & Risk Checks
-        trading_power = tms_cash_balance + non_cash_value
-        used_collateral = abs(tms_cash_balance) if tms_cash_balance < 0 else 0
-        utilization_rate = (used_collateral / non_cash_value * 100) if non_cash_value > 0 else 0
-        
-        # --- UI DISPLAY ---
-        
-        # Row 1: The Urgent Radar
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("📅 Today (Due)", f"Rs {abs(t0_due):,.0f}", delta="Pay Now" if t0_due < 0 else "Receive", delta_color="inverse" if t0_due < 0 else "normal", help="Action required today.")
-        c2.metric("📆 Tomorrow (T+1)", f"Rs {t1_due:,.0f}", delta_color="off", help="Projected for tomorrow.")
-        c3.metric("🏦 Ledger Cash", f"Rs {tms_cash_balance:,.0f}", delta="Overdue" if tms_cash_balance < 0 else "Collateral")
-        c4.metric("⚖️ Net Pending", f"Rs {net_due:,.0f}", delta=f"Pay: {payable_due:,.0f} | Rec: {receivable_due:,.0f}", delta_color="inverse")
-        
-        st.markdown("---")
-        
-        # Row 2: Trading Limit & Solvency Check
-        col_limit, col_solv = st.columns([1, 1])
-        with col_limit:
-            st.markdown("#### 🔋 Live Trading Limit")
-            st.metric("Total Buying Power", f"Rs {trading_power:,.0f}", delta=f"{utilization_rate:.1f}% Limit Used", delta_color="inverse" if utilization_rate > 90 else "normal")
-            st.progress(min(utilization_rate / 100, 1.0))
-            if utilization_rate > 90:
-                st.error("⚠️ Margin Call Risk! Utilization exceeds 90%. Load cash or sell positions.")
-                
-        with col_solv:
-            st.markdown("#### 🛡️ Solvency Check")
-            bank_bal = st.number_input("Enter your physical Bank Balance (Rs):", value=0.0, min_value=0.0, step=1000.0)
-            if bank_bal > 0:
-                total_obligation = abs(tms_cash_balance) if tms_cash_balance < 0 else 0
-                if total_obligation > 0:
-                    ratio = bank_bal / total_obligation
-                    if ratio < 1:
-                        st.error(f"⚠️ INSOLVENT (Coverage Ratio: {ratio:.2f}x). You lack the cash to clear TMS dues if required today.")
-                    else:
-                        st.success(f"✅ SOLVENT (Coverage Ratio: {ratio:.2f}x). You are financially secure.")
-                else:
-                    st.success("✅ SOLVENT. No pending negative obligations.")
-            else:
-                st.info("Enter your physical bank balance to calculate your solvency ratio.")
-                
-        st.markdown("---")
-        
-        # Row 3: Actionable Alerts
-        st.subheader("🚨 Settlement Alerts")
-        if not tms_df.empty:
-            overdue = tms_df[(tms_df["Status"] == "Pending") & (pd.to_datetime(tms_df["Due_Date"]) < today)]
-            if not overdue.empty:
-                st.error(f"⚠️ You have {len(overdue)} Overdue Settlements! Clear them immediately to avoid a 20% fine.")
-                st.dataframe(overdue[["Date", "Type", "Amount", "Due_Date"]], use_container_width=True)
-            else:
-                st.info("✅ No overdue settlements detected. All systems green.")
+            # Find Fines (Handle case sensitivity)
+            total_fines = abs(trx_df[trx_df["Type"].astype(str).str.upper() == "FINE"]["Amount"].sum())
+            
+            c_in, c_out, c_net, c_chg, c_fine = st.columns(5)
+            c_in.metric("Total Cash In", f"Rs {cash_in:,.0f}", help="Total positive inflow (Deposits, Sells, IPO Returns)")
+            c_out.metric("Total Cash Out", f"Rs {cash_out:,.0f}", help="Total negative outflow (Withdrawals, Buys)")
+            c_net.metric("Total Net Cash", f"Rs {net_cash:,.0f}", delta="Surplus" if net_cash > 0 else "Deficit")
+            c_chg.metric("Total Charges Paid", f"Rs {total_charges:,.0f}", help="Sum of transaction fees/DP charges")
+            c_fine.metric("Total Fines Paid", f"Rs {total_fines:,.0f}", help="Close-out or penalty fines")
         else:
-            st.info("No transaction data loaded. Go to 'Add Transactions' to begin.")
+            st.info("No transaction data yet. Go to 'Add Transactions' to begin.")
+            
+        st.markdown("---")
+        st.write("####New Codes#### (We will add the T+2 Settlement Radar here next!)")
 
     # --- TAB 2: ADD TRANSACTIONS ---
     with tms_tabs[1]:
-        st.write("####New Codes####")
-        
+        st.subheader("➕ Record TMS Transaction")
+        with st.form("add_tms_trx"):
+            c1, c2, c3 = st.columns(3)
+            date = c1.date_input("Date", datetime.now().date())
+            stock = c2.text_input("Stock Symbol (Optional)", placeholder="e.g. NABIL").upper()
+            
+            # Type Selection with "Other" Logic
+            type_sel = c3.selectbox("Transaction Type", ["IPO", "Buy", "Sell", "Deposit", "Withdraw", "Fine", "Other"])
+            trx_type = st.text_input("Specify Other Type") if type_sel == "Other" else type_sel
+                
+            c4, c5, c6 = st.columns(3)
+            # Medium Selection with "Other" Logic
+            med_sel = c4.selectbox("Medium", ["Nabil", "Global", "Esewa", "CIPS", "Khalti", "Other"])
+            medium = st.text_input("Specify Other Medium") if med_sel == "Other" else med_sel
+                
+            # Financials
+            amount = c5.number_input("Amount (Use + for IN, - for OUT)", value=0.0, help="+ for Deposit/Sell, - for Withdraw/Buy")
+            charge = c6.number_input("Charge / Fee", min_value=0.0, value=0.0, help="DP charges or transfer fees")
+            
+            c7, c8 = st.columns(2)
+            remark = c7.text_input("Remark", placeholder="e.g. Transferred for today's buy")
+            ref = c8.text_input("Reference / Txn ID", placeholder="e.g. ConnectIPS ID")
+            
+            st.markdown("---")
+            confirm = st.checkbox("I confirm the details above are correct.")
+            
+            if st.form_submit_button("💾 Save Transaction"):
+                if confirm and amount != 0:
+                    new_trx = pd.DataFrame([{
+                        "Date": date, "Stock": stock, "Type": trx_type, 
+                        "Medium": medium, "Amount": amount, "Charge": charge, 
+                        "Remark": remark, "Reference": ref
+                    }])
+                    
+                    # Fetch, Append, and Save
+                    trx_df = get_data("tms/tms_trx.csv")
+                    trx_df = pd.concat([trx_df, new_trx], ignore_index=True)
+                    save_data("tms/tms_trx.csv", trx_df)
+                    st.success(f"✅ Transaction Saved Successfully!")
+                elif amount == 0:
+                    st.error("Amount cannot be 0.")
+                else:
+                    st.warning("Please check the confirmation box before saving.")
+
     # --- TAB 3: VIEW TRANSACTIONS ---
     with tms_tabs[2]:
-        st.write("####New Codes####")
+        st.subheader("📜 Transaction Ledger")
+        trx_df = get_data("tms/tms_trx.csv")
         
-    # --- TAB 4: MANAGE DATA ---
-    with tms_tabs[3]:
-        st.write("####New Codes####")
-        
-    # --- TAB 5: EXPORT ---
-    with tms_tabs[4]:
-        st.write("####New Codes####")
-        
-    # --- TAB 6: SMART GRAPH ---
-    with tms_tabs[5]:
-        st.write("####New Codes####")
+        if not trx_df.empty:
+            # Filtering Options
+            f1, f2, f3 = st.columns(3)
+            f_type = f1.multiselect("Filter by Type", trx_df["Type"].unique())
+            f_med = f2.multiselect("Filter by Medium", trx_df["Medium"].unique())
+            f_stock = f3.text_input("Search Stock")
+            
+            # Processing Data
+            view_df = trx_df.copy()
+            view_df["Date"] = pd.to_datetime(view_df["Date"])
+            view_df = view_df.sort_values("Date")
+            
+            # Calculate Running Net Balance
+            view_df["Net_Balance"] = view_df["Amount"].cumsum()
+            
+            # Apply Filters
+            if f_type: view_df = view_df[view_df["Type"].isin(f_type)]
+            if f_med: view_df = view_df[view_df["Medium"].isin(f_med)]
+            if f_stock: view_df = view_df[view_df["Stock"].str.contains(f_stock.upper(), na=False)]
+            
+            # Apply Color Coding (Using Pandas Styler)
+            def color_rows(row):
+                t = str(row["Type"]).upper()
+                if "DEPOSIT" in t: return ["color: #00FF00"] * len(row) # Green
+                if "WITHDRAW" in t: return ["color: #DAA520"] * len(row) # Gold
+                if "BUY" in t: return ["color: #A9A9A9"] * len(row) # Gray (Black blends into dark mode)
+                if "SELL" in t: return ["color: #1E90FF"] * len(row) # Blue
+                if "FINE" in t: return ["color: #FF4B4B"] * len(row) # Red
+                return ["color: #FFC0CB"] * len(row) # Pink for IPO/Other
+            
+            st.dataframe(
+                view_df.style.apply(color_rows, axis=1).format({
+                    "Amount": "{:,.2f}", 
+                    "Charge": "{:,.2f}", 
+                    "Net_Balance": "{:,.2f}"
+                }), 
+                use_container_width=True, hide_index=True
+            )
+            
+            # Bottom Totals
+            st.markdown("### 📊 Filtered Totals")
+            t1, t2, t3 = st.columns(3)
+            t1.metric("Total Rows in View", len(view_df))
+            t2.metric("Total Amount in View", f"Rs {view_df['Amount'].sum():,.2f}")
+            t3.metric("Total Charges in View", f"Rs {view_df['Charge'].sum():,.2f}")
+        else:
+            st.info("No transactions to display.")
 
+   # --- TAB 4: MANAGE DATA ---
+    with tms_tabs[3]:
+        st.subheader("🛠️ Manage Data (Admin Zone)")
+        st.error("🚨 **DANGER ZONE: FORCE EDITING DATA** 🚨\n\nEditing data here forcefully overwrites the raw CSV files. If you change a transaction amount, date, or type, it will alter your entire Net Balance, Solvency calculations, and historical ledgers permanently. **Proceed with extreme caution!**")
+        
+        trx_df = get_data("tms/tms_trx.csv")
+        if not trx_df.empty:
+            # Render the interactive data editor
+            edited_df = st.data_editor(trx_df, num_rows="dynamic", use_container_width=True, key="tms_admin_editor")
+            
+            st.markdown("---")
+            c1, c2 = st.columns([1, 2])
+            confirm_danger = c1.checkbox("⚠️ I understand the consequences of altering raw database files.", key="danger_check")
+            
+            if c1.button("🔥 FORCE SAVE CHANGES", type="primary"):
+                if confirm_danger:
+                    # Detect if rows were deleted or modified (optional logging logic)
+                    save_data("tms/tms_trx.csv", edited_df)
+                    st.success("✅ Raw data forcefully overwritten. System logic will update on next refresh.")
+                    st.rerun()
+                else:
+                    st.warning("You must check the confirmation box to proceed.")
+        else:
+            st.info("No data to manage.")
+
+    
+        
+   # --- TAB 5: EXPORT ---
+    with tms_tabs[4]:
+        st.subheader("⬇️ Export Data")
+        st.write("Download your entire TMS transaction ledger for local backup, Excel analysis, or tax purposes.")
+        
+        trx_df = get_data("tms/tms_trx.csv")
+        if not trx_df.empty:
+            # Convert DF to CSV bytes
+            csv = trx_df.to_csv(index=False).encode('utf-8')
+            
+            c1, c2 = st.columns(2)
+            c1.download_button(
+                label="📥 Download TMS Ledger (CSV)",
+                data=csv,
+                file_name=f"TMS_Trx_Ledger_{datetime.now().strftime('%Y%m%d')}.csv",
+                mime="text/csv",
+                type="primary"
+            )
+            c1.caption(f"Contains {len(trx_df)} transaction records.")
+        else:
+            st.info("No data available to export.")
+
+    
+        
+   # --- TAB 6: SMART GRAPH ---
+    with tms_tabs[5]:
+        import plotly.graph_objects as go # Required for Waterfall
+        
+        st.subheader("📈 Smart Financial Visuals")
+        trx_df = get_data("tms/tms_trx.csv")
+        
+        if not trx_df.empty:
+            trx_df["Date"] = pd.to_datetime(trx_df["Date"])
+            trx_df = trx_df.sort_values("Date")
+            trx_df["Net_Balance"] = trx_df["Amount"].cumsum()
+            
+            # --- GRAPH 1: Pulse Line (Cumulative Net Balance) ---
+            st.markdown("#### 💓 The Pulse: Cumulative Net Balance")
+            fig_pulse = px.line(trx_df, x="Date", y="Net_Balance", markers=True, title="Account Health Trajectory")
+            fig_pulse.update_traces(line_color="#00FF00", line_width=3)
+            st.plotly_chart(fig_pulse, use_container_width=True)
+            
+            st.markdown("---")
+            
+            # --- GRAPH 2: Multi-Line Graph (Cash Flows) ---
+            st.markdown("#### 📊 Cash In vs Cash Out Trends")
+            
+            # Group data by date to calculate daily totals
+            flow_df = trx_df.groupby("Date").apply(
+                lambda x: pd.Series({
+                    "Cash In (Dep/Sell)": x[x["Amount"] > 0]["Amount"].sum(),
+                    "Cash Out (Wth/Buy)": x[x["Amount"] < 0]["Amount"].abs().sum(),
+                    "Charges": x["Charge"].sum(),
+                    "Fines": x[x["Type"].astype(str).str.upper() == "FINE"]["Amount"].abs().sum()
+                })
+            ).reset_index()
+            
+            fig_flow = px.line(
+                flow_df, x="Date", 
+                y=["Cash In (Dep/Sell)", "Cash Out (Wth/Buy)", "Charges", "Fines"], 
+                markers=True, title="Daily Financial Flows"
+            )
+            # Customizing colors for clarity
+            fig_flow.update_traces(patch={"line": {"width": 2}})
+            st.plotly_chart(fig_flow, use_container_width=True)
+
+            st.markdown("---")
+
+            # --- GRAPH 3 & 4: Donut & Cost Heatmap ---
+            c1, c2 = st.columns(2)
+            
+            with c1:
+                st.markdown("#### 🔄 Transaction Mediums")
+                fig_donut = px.pie(trx_df, names="Medium", values=trx_df["Amount"].abs(), hole=0.4, title="Money Flow by Medium")
+                st.plotly_chart(fig_donut, use_container_width=True)
+                
+            with c2:
+                st.markdown("#### 💸 Cost of Trading (Fines & Charges)")
+                cost_df = trx_df[(trx_df["Charge"] > 0) | (trx_df["Type"].astype(str).str.upper() == "FINE")].copy()
+                if not cost_df.empty:
+                    # Combine charges and absolute fines into a total cost column
+                    cost_df["Total_Cost"] = cost_df["Charge"] + (cost_df["Amount"].abs() if "FINE" in cost_df["Type"].values else 0)
+                    fig_cost = px.bar(cost_df, x="Date", y="Total_Cost", color="Type", title="Daily Money Lost to Fees/Fines")
+                    st.plotly_chart(fig_cost, use_container_width=True)
+                else:
+                    st.success("No charges or fines paid yet! 🎉")
+
+            st.markdown("---")
+
+            # --- GRAPH 5: Liquidity Waterfall ---
+            st.markdown("#### 🌊 Liquidity Waterfall (Current Month)")
+            current_month = datetime.now().month
+            water_df = trx_df[trx_df["Date"].dt.month == current_month].copy()
+            
+            if not water_df.empty:
+                # Setup waterfall data array
+                measures = ["relative"] * len(water_df)
+                measures.append("total") # The final bar is the total
+                
+                x_labels = water_df["Date"].dt.strftime('%b %d').tolist() + ["Current Balance"]
+                y_values = water_df["Amount"].tolist() + [0] # Plotly auto-calculates the 0
+                text_values = water_df["Type"].tolist() + ["Total"]
+                
+                fig_water = go.Figure(go.Waterfall(
+                    name="20", orientation="v",
+                    measure=measures,
+                    x=x_labels,
+                    textposition="outside",
+                    text=text_values,
+                    y=y_values,
+                    decreasing={"marker":{"color":"#FF4B4B"}}, # Red for outflow
+                    increasing={"marker":{"color":"#00FF00"}}, # Green for inflow
+                    totals={"marker":{"color":"#1E90FF"}}      # Blue for total
+                ))
+                fig_water.update_layout(title="Monthly Cash Flow Waterfall")
+                st.plotly_chart(fig_water, use_container_width=True)
+            else:
+                st.info("No transactions this month for the waterfall chart.")
+                
+        else:
+            st.info("No data available for graphs.")
 
 
 
@@ -1460,6 +1622,7 @@ elif menu == "Manage Data":
         if st.button("Save Log Changes"):
             save_data("activity_log.csv", edit_log)
             st.success("Logs Saved.")
+
 
 
 
