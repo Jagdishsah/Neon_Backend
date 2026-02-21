@@ -570,32 +570,113 @@ elif menu == "My TMS":
     # Creating the Nested Tabs
     tms_tabs = st.tabs(["📊 Dashboard", "✍️ Add Transactions", "📜 View Transactions", "🛠️ Manage Data", "⬇️ Export", "📈 Smart Graph", "📝 Action Logs"])
     
-    # --- TAB 1: THE DASHBOARD ---
+   # --- TAB 1: THE DASHBOARD ---
     with tms_tabs[0]:
-        st.subheader("💸 TMS Cash Flow Summary")
+        st.subheader("💸 TMS Cash Flow & Solvency")
         trx_df = get_data("tms/tms_trx.csv")
         
         if not trx_df.empty:
-            # Metric Calculations
-            cash_in = trx_df[trx_df["Amount"] > 0]["Amount"].sum()
-            cash_out = abs(trx_df[trx_df["Amount"] < 0]["Amount"].sum())
-            net_cash = trx_df["Amount"].sum()
-            total_charges = trx_df["Charge"].sum()
+            trx_df["Date"] = pd.to_datetime(trx_df["Date"])
             
-            # Find Fines (Handle case sensitivity)
+            # --- 1. CORE FINANCIAL CALCULATIONS ---
+            # Exclude Collateral from Net Cash Balance
+            is_collat = (trx_df["Medium"].astype(str).str.upper() == "COLLATERAL") | (trx_df["Type"].astype(str).str.upper() == "COLLATERAL LOAD")
+            real_cash_df = trx_df[~is_collat]
+            collat_df = trx_df[is_collat]
+            
+            cash_in = real_cash_df[real_cash_df["Amount"] > 0]["Amount"].sum()
+            cash_out = abs(real_cash_df[real_cash_df["Amount"] < 0]["Amount"].sum())
+            total_charges = trx_df["Charge"].sum()
             total_fines = abs(trx_df[trx_df["Type"].astype(str).str.upper() == "FINE"]["Amount"].sum())
             
-            c_in, c_out, c_net, c_chg, c_fine = st.columns(5)
-            c_in.metric("Total Cash In", f"Rs {cash_in:,.0f}", help="Total positive inflow (Deposits, Sells, IPO Returns)")
-            c_out.metric("Total Cash Out", f"Rs {cash_out:,.0f}", help="Total negative outflow (Withdrawals, Buys)")
-            c_net.metric("Total Net Cash", f"Rs {net_cash:,.0f}", delta="Surplus" if net_cash > 0 else "Deficit")
-            c_chg.metric("Total Charges Paid", f"Rs {total_charges:,.0f}", help="Sum of transaction fees/DP charges")
-            c_fine.metric("Total Fines Paid", f"Rs {total_fines:,.0f}", help="Close-out or penalty fines")
+            # Net Balance is ONLY real cash moving in/out minus fees
+            net_balance = real_cash_df["Amount"].sum() - total_charges
+            
+            # Buying Power Logic (Broker Limit = Collateral * 4 usually)
+            base_free_collateral = 10824.0
+            loaded_collateral = collat_df["Amount"].sum()
+            total_collateral = base_free_collateral + loaded_collateral
+            # Limit = (Collateral * 4) + Net Cash Balance
+            buying_power = (total_collateral * 4) + net_balance 
+            
+            # --- UI: MAIN METRICS ---
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Net Balance", f"Rs {net_balance:,.0f}", delta="Deficit" if net_balance < 0 else "Surplus", delta_color="inverse" if net_balance < 0 else "normal")
+            c2.metric("🔋 Buying Power", f"Rs {buying_power:,.0f}", help=f"Based on Rs {total_collateral:,.0f} collateral (4x) + Net Balance")
+            c3.metric("Real Cash In", f"Rs {cash_in:,.0f}", help="Excludes Collateral")
+            c4.metric("Charges & Fines", f"Rs {total_charges + total_fines:,.0f}")
+            
+            st.markdown("---")
+            
+            # --- 2. THE RADAR & ALERTS ROW ---
+            r1, r2 = st.columns([1, 1])
+            
+            with r1:
+                st.markdown("#### 🚨 Account Alerts")
+                if net_balance < 0:
+                    daily_df = real_cash_df.groupby("Date").agg({"Amount": "sum", "Charge": "sum"}).reset_index()
+                    daily_df["Daily_Net"] = daily_df["Amount"] - daily_df["Charge"]
+                    daily_df = daily_df.sort_values("Date")
+                    daily_df["Running_Balance"] = daily_df["Daily_Net"].cumsum()
+                    
+                    last_positive_date = daily_df[daily_df["Running_Balance"] >= 0]["Date"].max()
+                    today = pd.to_datetime(datetime.now().date())
+                    
+                    if pd.isna(last_positive_date): first_negative_date = daily_df["Date"].min()
+                    else:
+                        streak_df = daily_df[daily_df["Date"] > last_positive_date]
+                        first_negative_date = streak_df["Date"].min() if not streak_df.empty else today
+                    
+                    days_negative = (today - first_negative_date).days
+                    
+                    if days_negative >= 2:
+                        st.error(f"🔥 **CRITICAL:** Negative balance (Rs {net_balance:,.2f}) for **{days_negative} days**! 20% fine risk.")
+                    else:
+                        st.warning(f"⚠️ **Notice:** Net Balance is negative (Rs {net_balance:,.2f}). Settle T+2 soon.")
+                else:
+                    st.success("✅ Account settled. No pending deficits.")
+
+            with r2:
+                st.markdown("#### 📡 Upcoming Payout Radar")
+                # NEPSE T+3 Payout Logic (Skips Fri & Sat)
+                def get_payout_date(sell_date):
+                    days_added = 0
+                    current = sell_date
+                    while days_added < 3:
+                        current += pd.Timedelta(days=1)
+                        if current.weekday() not in [4, 5]: # 4=Fri, 5=Sat
+                            days_added += 1
+                    return current
+                
+                sells_df = trx_df[trx_df["Type"].astype(str).str.upper() == "SELL"].copy()
+                if not sells_df.empty:
+                    sells_df["Payout_Date"] = sells_df["Date"].apply(get_payout_date)
+                    today = pd.to_datetime(datetime.now().date())
+                    pending_payouts = sells_df[sells_df["Payout_Date"] >= today].copy()
+                    
+                    if not pending_payouts.empty:
+                        for _, row in pending_payouts.iterrows():
+                            days_left = (row["Payout_Date"] - today).days
+                            day_name = row["Payout_Date"].strftime("%A")
+                            label = f"Tomorrow" if days_left == 1 else f"On {day_name}" if days_left > 0 else "Today!"
+                            st.info(f"💸 **Rs {row['Amount']:,.2f}** expected **{label}** (Sold {row['Stock']})")
+                    else:
+                        st.write("No pending payouts from recent sells.")
+                else:
+                    st.write("No recent sell transactions.")
+                    
+            st.markdown("---")
+            
+            # --- 3. RECENT ACTIVITY MINIFEED ---
+            st.markdown("#### 🕒 Recent Activity")
+            recent_df = trx_df.sort_values(by="Date", ascending=False).head(5)
+            # Clean up display columns
+            display_df = recent_df[["Date", "Type", "Stock", "Amount", "Medium"]].copy()
+            display_df["Date"] = display_df["Date"].dt.strftime('%Y-%m-%d')
+            st.dataframe(display_df, use_container_width=True, hide_index=True)
+                
         else:
             st.info("No transaction data yet. Go to 'Add Transactions' to begin.")
-            
-        st.markdown("---")
-        st.write("####New Codes#### (We will add the T+2 Settlement Radar here next!)")
 
     # --- TAB 2: ADD TRANSACTIONS ---
     with tms_tabs[1]:
@@ -606,12 +687,12 @@ elif menu == "My TMS":
             stock = c2.text_input("Stock Symbol (Optional)", placeholder="e.g. NABIL").upper()
             
             # Type Selection
-            type_sel = c3.selectbox(
+            ttype_sel = c3.selectbox(
                 "Transaction Type", 
-                ["Buy", "Sell", "Deposit", "Withdraw", "Fine", "IPO", "Other"]
+                ["Buy", "Sell", "Deposit", "Withdraw", "Fine", "IPO", "Collateral Load", "Other"]
             )
-            trx_type = st.text_input("Specify Other Type") if type_sel == "Other" else type_sel
-                
+            trx_type = st.text_input("Specify Other Type", placeholder="Type custom here...") if type_sel == "Other" else type_sel
+            
             c4, c5, c6 = st.columns(3)
             
             # Medium Selection
@@ -1724,6 +1805,7 @@ elif menu == "Manage Data":
         if st.button("Save Log Changes"):
             save_data("activity_log.csv", edit_log)
             st.success("Logs Saved.")
+
 
 
 
