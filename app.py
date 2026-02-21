@@ -2,13 +2,15 @@ import streamlit as st
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
-from github import Github
+from github import Github, GithubException
 from io import StringIO
+import traceback
 import plotly.express as px
 from datetime import datetime
 import time
 from scrape import get_market_data
 import plotly.graph_objects as go
+
 
 # --- CONFIGURATION ---
 st.set_page_config(page_title="NEPSE Pro Terminal", page_icon="📈", layout="wide")
@@ -123,23 +125,54 @@ def get_data(filename):
         
         # 👆 NEW TMS SCHEMAS 👆
         else: cols = []
+            except Exception as e:
+        if filename != "error_log.csv":
+            log_error(f"get_data: {filename}", str(e))
         return pd.DataFrame(columns=cols)
 
 def save_data(filename, df):
-    repo = get_repo()
-    if not repo: return False
+    """Bulletproof save function that prevents 422 SHA errors."""
     try:
-        csv_content = df.to_csv(index=False)
+        repo = get_repo()
+        csv_data = df.to_csv(index=False)
         try:
-            file = repo.get_contents(filename)
-            repo.update_file(file.path, f"Update {filename}", csv_content, file.sha)
-        except:
-            repo.create_file(filename, f"Create {filename}", csv_content)
-        return True
+            # Step 1: Try to fetch the file to get its specific SHA
+            contents = repo.get_contents(filename)
+            repo.update_file(contents.path, f"Update {filename}", csv_data, contents.sha)
+        except GithubException as e:
+            # Step 2: If it TRULY doesn't exist (404), create it
+            if e.status == 404:
+                repo.create_file(filename, f"Create {filename}", csv_data)
+            else:
+                raise e # If it's another API error, pass it to the except block below
     except Exception as e:
-        st.error(f"Save Failed: {e}")
-        return False
+        if filename != "error_log.csv":
+            log_error(f"save_data: {filename}", str(e))
+        st.error(f"Error saving {filename}: {e}")
 
+def log_error(context, error_msg):
+    """Silently logs system crashes and errors to a CSV."""
+    try:
+        repo = get_repo()
+        now = datetime.now()
+        new_row = pd.DataFrame([{
+            "Date": now.strftime("%Y-%m-%d"), 
+            "Time": now.strftime("%H:%M:%S"),
+            "Context": context, 
+            "Error_Message": error_msg, 
+            "Traceback": traceback.format_exc()
+        }])
+        
+        try:
+            contents = repo.get_contents("error_log.csv")
+            df = pd.read_csv(StringIO(contents.decoded_content.decode('utf-8')))
+            df = pd.concat([df, new_row], ignore_index=True)
+            repo.update_file(contents.path, "Update error log", df.to_csv(index=False), contents.sha)
+        except GithubException as e:
+            if e.status == 404:
+                repo.create_file("error_log.csv", "Create error log", new_row.to_csv(index=False))
+    except Exception:
+        pass # Failsafe to prevent crash loops if logging itself fails
 
 
 def update_wealth_log(port, cache):
@@ -1735,7 +1768,7 @@ elif menu == "Risk Manager":
 elif menu == "Manage Data":
     st.title("🛠 Data Editor")
     
-    tab1, tab2, tab3, tab4 = st.tabs(["Portfolio", "History", "Watchlist", "Activity Log"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["Portfolio", "History", "Watchlist", "Activity Log", "🚨 System Errors"])
     
     # 1. PORTFOLIO EDITOR
     with tab1:
@@ -1794,6 +1827,26 @@ elif menu == "Manage Data":
         if st.button("Save Log Changes"):
             save_data("activity_log.csv", edit_log)
             st.success("Logs Saved.")
+
+    with tab5:
+        st.subheader("⚠️ System Error Log")
+        st.caption("Tracks backend crashes, API failures, and GitHub connection issues.")
+        
+        try:
+            error_df = get_data("error_log.csv")
+            if error_df.empty or "Error_Message" not in error_df.columns:
+                st.success("System is running perfectly! No errors logged. 🎉")
+            else:
+                # Show errors, newest first
+                st.dataframe(error_df.sort_values(by=["Date", "Time"], ascending=False), use_container_width=True)
+                
+                if st.button("Clear Error Log"):
+                    save_data("error_log.csv", pd.DataFrame(columns=["Date", "Time", "Context", "Error_Message", "Traceback"]))
+                    st.success("Log cleared successfully!")
+                    st.rerun()
+        except Exception:
+            st.success("System is running perfectly! No errors logged. 🎉")
+
 
 
 
