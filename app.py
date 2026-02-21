@@ -613,10 +613,10 @@ elif menu == "My TMS":
             
             # Highlight Buying Power in Green if positive, Red if used up
             c2.metric("🔋 Buying Power", f"Rs {buying_power:,.0f}", 
-                      help=f"Calculation: (Rs {total_collateral:,.0f} Collateral x 4) + (Rs {net_balance:,.0f} Cash Balance)")
+                   
             
-            c3.metric("Real Cash Out", f"Rs {cash_out:,.0f}", help="Sum of Buys, Withdrawals, and Fines")
-            c4.metric("Real Cash In", f"Rs {cash_in:,.0f}", help="Sum of Deposits and Sales")
+            c3.metric("Real Cash Out", f"Rs {cash_out:,.0f}", help="Sum of Withdrawals")
+            c4.metric("Real Cash In", f"Rs {cash_in:,.0f}", help="Sum of Deposits Except Collateral")
             
             st.markdown("---")
             
@@ -1794,6 +1794,7 @@ elif menu == "Manage Data":
         if st.button("Save Log Changes"):
             save_data("activity_log.csv", edit_log)
             st.success("Logs Saved.")
+
 
 
 
