@@ -134,3 +134,30 @@ github.GithubException.UnknownObjectException: 404 {""message"": ""Not Found"", 
     raise self.createException(status, responseHeaders, data)
 github.GithubException.UnknownObjectException: 404 {""message"": ""Not Found"", ""documentation_url"": ""https://docs.github.com/rest/repos/contents#get-repository-content"", ""status"": ""404""}
 "
+2026-02-21,16:48:46,get_data: tms/tms_holdings.csv,"404 {""message"": ""Not Found"", ""documentation_url"": ""https://docs.github.com/rest/repos/contents#get-repository-content"", ""status"": ""404""}","Traceback (most recent call last):
+  File ""/mount/src/nepse_terminal/app.py"", line 89, in get_data
+    content = repo.get_contents(filename)
+  File ""/home/adminuser/venv/lib/python3.13/site-packages/github/Repository.py"", line 2463, in get_contents
+    headers, data = self._requester.requestJsonAndCheck(
+                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        ""GET"",
+        ^^^^^^
+    ...<2 lines>...
+        follow_302_redirect=True,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File ""/home/adminuser/venv/lib/python3.13/site-packages/github/Requester.py"", line 623, in requestJsonAndCheck
+    return self.__check(
+           ~~~~~~~~~~~~^
+        *self.requestJson(
+        ^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+        )
+        ^
+    )
+    ^
+  File ""/home/adminuser/venv/lib/python3.13/site-packages/github/Requester.py"", line 853, in __check
+    raise self.createException(status, responseHeaders, data)
+github.GithubException.UnknownObjectException: 404 {""message"": ""Not Found"", ""documentation_url"": ""https://docs.github.com/rest/repos/contents#get-repository-content"", ""status"": ""404""}
+"
