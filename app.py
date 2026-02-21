@@ -568,7 +568,7 @@ elif menu == "My TMS":
     st.caption("Central hub for Broker Ledger, Cash Flows, and T+2 Settlements")
 
     # Creating the Nested Tabs
-    tms_tabs = st.tabs(["📊 Dashboard", "✍️ Add Transactions", "📜 View Transactions", "🛠️ Manage Data", "⬇️ Export", "📈 Smart Graph", "📝 Action Logs])
+    tms_tabs = st.tabs(["📊 Dashboard", "✍️ Add Transactions", "📜 View Transactions", "🛠️ Manage Data", "⬇️ Export", "📈 Smart Graph", "📝 Action Logs"])
     
     # --- TAB 1: THE DASHBOARD ---
     with tms_tabs[0]:
@@ -1724,6 +1724,7 @@ elif menu == "Manage Data":
         if st.button("Save Log Changes"):
             save_data("activity_log.csv", edit_log)
             st.success("Logs Saved.")
+
 
 
 
