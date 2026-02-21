@@ -605,14 +605,17 @@ elif menu == "My TMS":
             date = c1.date_input("Date", datetime.now().date())
             stock = c2.text_input("Stock Symbol (Optional)", placeholder="e.g. NABIL").upper()
             
-            # Type Selection with "Other" Logic
+            # --- UPDATED: Dynamic Type Selection ---
             type_sel = c3.selectbox("Transaction Type", ["IPO", "Buy", "Sell", "Deposit", "Withdraw", "Fine", "Other"])
-            trx_type = st.text_input("Specify Other Type") if type_sel == "Other" else type_sel
+            # If 'Other' is selected, show a text input to specify it. Otherwise, use the selected value.
+            trx_type = st.text_input("Specify Other Type", placeholder="Type custom transaction type here...") if type_sel == "Other" else type_sel
                 
             c4, c5, c6 = st.columns(3)
-            # Medium Selection with "Other" Logic
-            med_sel = c4.selectbox("Medium", ["Nabil", "Global", "Esewa", "CIPS", "Khalti", "Other"])
-            medium = st.text_input("Specify Other Medium") if med_sel == "Other" else med_sel
+            
+            # --- UPDATED: Dynamic Medium Selection (Added Collateral) ---
+            med_sel = c4.selectbox("Medium", ["Nabil", "Global", "Esewa", "CIPS", "Khalti", "Collateral", "Other"])
+            # If 'Other' is selected, show a text input to specify it. Otherwise, use the selected value.
+            medium = st.text_input("Specify Other Medium", placeholder="Type custom medium here...") if med_sel == "Other" else med_sel
                 
             # Financials
             amount = c5.number_input("Amount (Use + for IN, - for OUT)", value=0.0, help="+ for Deposit/Sell, - for Withdraw/Buy")
@@ -626,7 +629,14 @@ elif menu == "My TMS":
             confirm = st.checkbox("I confirm the details above are correct.")
             
             if st.form_submit_button("💾 Save Transaction"):
-                if confirm and amount != 0:
+                # Make sure the user didn't leave the "Other" specify box blank
+                if type_sel == "Other" and not trx_type.strip():
+                    st.error("❌ Please specify the custom Transaction Type.")
+                elif med_sel == "Other" and not medium.strip():
+                    st.error("❌ Please specify the custom Medium.")
+                elif amount == 0:
+                    st.error("❌ Amount cannot be 0.")
+                elif confirm:
                     new_trx = pd.DataFrame([{
                         "Date": date, "Stock": stock, "Type": trx_type, 
                         "Medium": medium, "Amount": amount, "Charge": charge, 
@@ -638,10 +648,8 @@ elif menu == "My TMS":
                     trx_df = pd.concat([trx_df, new_trx], ignore_index=True)
                     save_data("tms/tms_trx.csv", trx_df)
                     st.success(f"✅ Transaction Saved Successfully!")
-                elif amount == 0:
-                    st.error("Amount cannot be 0.")
                 else:
-                    st.warning("Please check the confirmation box before saving.")
+                    st.warning("⚠️ Please check the confirmation box before saving.")
 
     # --- TAB 3: VIEW TRANSACTIONS ---
     with tms_tabs[2]:
@@ -1622,6 +1630,7 @@ elif menu == "Manage Data":
         if st.button("Save Log Changes"):
             save_data("activity_log.csv", edit_log)
             st.success("Logs Saved.")
+
 
 
 
