@@ -596,14 +596,14 @@ elif menu == "My TMS":
             net_balance = (cash_in - cash_out) - total_charges
             
             # Buying Power Logic
-            # Base Collateral = 10,824. Buying Power = (Collateral * 4) + Net Balance
+            # Base Collateral = 10,824. Buying Power = (Collateral) + Net Balance
             base_free_collateral = 10824.0
             # Include any 'Collateral Load' transactions added by user
             loaded_collateral = trx_df[trx_df["Type"].astype(str).str.upper() == "COLLATERAL LOAD"]["Amount"].sum()
             total_collateral = base_free_collateral + loaded_collateral
             
             # Final Buying Power Calculation
-            buying_power = (total_collateral * 4) + net_balance 
+            buying_power = (total_collateral) + net_balance 
             
             # --- UI: MAIN METRICS ---
             c1, c2, c3, c4 = st.columns(4)
@@ -1794,6 +1794,7 @@ elif menu == "Manage Data":
         if st.button("Save Log Changes"):
             save_data("activity_log.csv", edit_log)
             st.success("Logs Saved.")
+
 
 
 
