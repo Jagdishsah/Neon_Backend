@@ -101,8 +101,15 @@ def get_data(filename):
         # 👇 ADD THIS NEW LINE 👇
         elif "price_log" in filename: cols = ["Date", "Symbol", "LTP"]
         # Add this line inside the get_data function schema list:
+
         elif "Data" in filename: 
             cols = ["Date", "Realized_PL", "Realized_PL_Pct", "Unrealized_PL", "Unrealized_PL_Pct"]
+        # 👇 NEW TMS SCHEMAS 👇
+        elif "tms_ledger_master" in filename:
+            cols = ["Date", "Type", "Category", "Amount", "Status", "Due_Date", "Ref_ID", "Description", "Is_Non_Cash", "Dispute_Note", "Fiscal_Year"]
+        elif "tms_holdings" in filename:
+            cols = ["Symbol", "Total_Qty", "Pledged_Qty", "LTP", "Haircut"]
+        # 👆 NEW TMS SCHEMAS 👆
         else: cols = []
         return pd.DataFrame(columns=cols)
 
@@ -388,7 +395,7 @@ def calculate_metrics(units, cost, ltp, change=0):
 # --- NAVIGATION ---
 st.sidebar.title("🚀 NEPSE Terminal")
 menu = st.sidebar.radio("Main Menu", 
-    [ "Dashboard", "Portfolio", "Watchlist", "Add Trade", "Sell Stock", "History", "Activity Log", "Wealth Graph", "WACC Projection", "What If Analysis", "Reports", "Manage Data", "Trading Journal", "Risk Manager" ] )
+    [ "Dashboard", "My TMS", "Portfolio", "Watchlist", "Add Trade", "Sell Stock", "History", "Activity Log", "Wealth Graph", "WACC Projection", "What If Analysis", "Reports", "Manage Data", "Trading Journal", "Risk Manager" ] )
 if st.sidebar.button("🔄 Refresh Market Data"):
     refresh_market_cache()
     st.rerun()
@@ -541,7 +548,145 @@ elif menu == "Dashboard":
                     st.markdown("---")
                     for _, h in hits.iterrows():
                         st.success(f"🎯 **BUY:** {h['Symbol']} @ {h['LTP']}")
+
+
+# ================= MY TMS =================
+elif menu == "My TMS":
+    st.title("🏦 TMS Command Center")
+    st.caption("Central hub for Broker Ledger, Collateral, and T+2 Settlements")
+
+    # Creating the Nested Tabs
+    tms_tabs = st.tabs(["📊 Dashboard", "✍️ Add Transactions", "📜 View Transactions", "🛠️ Manage Data (Admin)", "⬇️ Export", "📈 Smart Graph"])
+    
+    # --- TAB 1: THE DASHBOARD ---
+    with tms_tabs[0]:
+        st.subheader("📡 Solvency & T+2 Settlement Radar")
+        
+        # Load TMS Data from the 'tms' folder
+        tms_df = get_data("tms/tms_ledger_master.csv")
+        holdings_df = get_data("tms/tms_holdings.csv")
+        
+        # Dashboard Engine Calculations
+        tms_cash_balance = 0.0
+        t0_due, t1_due, t2_due = 0.0, 0.0, 0.0
+        trading_power = 0.0
+        utilization_rate = 0.0
+        net_due = 0.0
+        payable_due = 0.0
+        receivable_due = 0.0
+        
+        if not tms_df.empty:
+            # Bank & Cash Balance Logic
+            tms_credits = tms_df[tms_df["Category"].isin(["DEPOSIT", "RECEIVABLE", "DIRECT_PAY"])]["Amount"].sum()
+            tms_debits = tms_df[tms_df["Category"].isin(["WITHDRAW", "PAYABLE", "EXPENSE"])]["Amount"].sum()
+            tms_cash_balance = tms_credits - tms_debits
+            
+            # Settlement / Radar Logic
+            pending_df = tms_df[tms_df["Status"] == "Pending"].copy()
+            if not pending_df.empty:
+                payable_due = pending_df[pending_df["Category"] == "PAYABLE"]["Amount"].sum()
+                receivable_due = pending_df[pending_df["Category"] == "RECEIVABLE"]["Amount"].sum()
+                net_due = payable_due - receivable_due
                 
+                # Filter dues by exact days
+                today = pd.to_datetime(datetime.now().date())
+                pending_df["Due_Date"] = pd.to_datetime(pending_df["Due_Date"])
+                
+                t0_df = pending_df[pending_df["Due_Date"] <= today]
+                t1_df = pending_df[pending_df["Due_Date"] == today + pd.Timedelta(days=1)]
+                t2_df = pending_df[pending_df["Due_Date"] >= today + pd.Timedelta(days=2)]
+                
+                calc_net = lambda d: d[d["Category"]=="RECEIVABLE"]["Amount"].sum() - d[d["Category"]=="PAYABLE"]["Amount"].sum()
+                t0_due = calc_net(t0_df)
+                t1_due = calc_net(t1_df)
+                t2_due = calc_net(t2_df)
+                
+        # Non-Cash Collateral Logic
+        non_cash_value = 0.0
+        if not holdings_df.empty:
+            holdings_df["Collateral_Val"] = holdings_df["Pledged_Qty"] * holdings_df["LTP"] * (1 - (holdings_df["Haircut"]/100))
+            non_cash_value = holdings_df["Collateral_Val"].sum()
+        
+        # Limit & Risk Checks
+        trading_power = tms_cash_balance + non_cash_value
+        used_collateral = abs(tms_cash_balance) if tms_cash_balance < 0 else 0
+        utilization_rate = (used_collateral / non_cash_value * 100) if non_cash_value > 0 else 0
+        
+        # --- UI DISPLAY ---
+        
+        # Row 1: The Urgent Radar
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("📅 Today (Due)", f"Rs {abs(t0_due):,.0f}", delta="Pay Now" if t0_due < 0 else "Receive", delta_color="inverse" if t0_due < 0 else "normal", help="Action required today.")
+        c2.metric("📆 Tomorrow (T+1)", f"Rs {t1_due:,.0f}", delta_color="off", help="Projected for tomorrow.")
+        c3.metric("🏦 Ledger Cash", f"Rs {tms_cash_balance:,.0f}", delta="Overdue" if tms_cash_balance < 0 else "Collateral")
+        c4.metric("⚖️ Net Pending", f"Rs {net_due:,.0f}", delta=f"Pay: {payable_due:,.0f} | Rec: {receivable_due:,.0f}", delta_color="inverse")
+        
+        st.markdown("---")
+        
+        # Row 2: Trading Limit & Solvency Check
+        col_limit, col_solv = st.columns([1, 1])
+        with col_limit:
+            st.markdown("#### 🔋 Live Trading Limit")
+            st.metric("Total Buying Power", f"Rs {trading_power:,.0f}", delta=f"{utilization_rate:.1f}% Limit Used", delta_color="inverse" if utilization_rate > 90 else "normal")
+            st.progress(min(utilization_rate / 100, 1.0))
+            if utilization_rate > 90:
+                st.error("⚠️ Margin Call Risk! Utilization exceeds 90%. Load cash or sell positions.")
+                
+        with col_solv:
+            st.markdown("#### 🛡️ Solvency Check")
+            bank_bal = st.number_input("Enter your physical Bank Balance (Rs):", value=0.0, min_value=0.0, step=1000.0)
+            if bank_bal > 0:
+                total_obligation = abs(tms_cash_balance) if tms_cash_balance < 0 else 0
+                if total_obligation > 0:
+                    ratio = bank_bal / total_obligation
+                    if ratio < 1:
+                        st.error(f"⚠️ INSOLVENT (Coverage Ratio: {ratio:.2f}x). You lack the cash to clear TMS dues if required today.")
+                    else:
+                        st.success(f"✅ SOLVENT (Coverage Ratio: {ratio:.2f}x). You are financially secure.")
+                else:
+                    st.success("✅ SOLVENT. No pending negative obligations.")
+            else:
+                st.info("Enter your physical bank balance to calculate your solvency ratio.")
+                
+        st.markdown("---")
+        
+        # Row 3: Actionable Alerts
+        st.subheader("🚨 Settlement Alerts")
+        if not tms_df.empty:
+            overdue = tms_df[(tms_df["Status"] == "Pending") & (pd.to_datetime(tms_df["Due_Date"]) < today)]
+            if not overdue.empty:
+                st.error(f"⚠️ You have {len(overdue)} Overdue Settlements! Clear them immediately to avoid a 20% fine.")
+                st.dataframe(overdue[["Date", "Type", "Amount", "Due_Date"]], use_container_width=True)
+            else:
+                st.info("✅ No overdue settlements detected. All systems green.")
+        else:
+            st.info("No transaction data loaded. Go to 'Add Transactions' to begin.")
+
+    # --- TAB 2: ADD TRANSACTIONS ---
+    with tms_tabs[1]:
+        st.write("####New Codes####")
+        
+    # --- TAB 3: VIEW TRANSACTIONS ---
+    with tms_tabs[2]:
+        st.write("####New Codes####")
+        
+    # --- TAB 4: MANAGE DATA ---
+    with tms_tabs[3]:
+        st.write("####New Codes####")
+        
+    # --- TAB 5: EXPORT ---
+    with tms_tabs[4]:
+        st.write("####New Codes####")
+        
+    # --- TAB 6: SMART GRAPH ---
+    with tms_tabs[5]:
+        st.write("####New Codes####")
+
+
+
+
+
+
 # ================= PORTFOLIO =================
 elif menu == "Portfolio":
     st.title("💼 Holdings Report")
@@ -1315,6 +1460,7 @@ elif menu == "Manage Data":
         if st.button("Save Log Changes"):
             save_data("activity_log.csv", edit_log)
             st.success("Logs Saved.")
+
 
 
 
