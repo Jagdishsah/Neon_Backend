@@ -11,3 +11,4 @@ Date,Stock,Type,Medium,Amount,Charge,Remark,Reference
 2026-02-05,KKHC*20,Sell,Collateral,4916.4,0.0,Sell KKHC Near BE Without Realizing Circuit {Scary Cat Effect},
 2026-02-09,NHPC * 10,Sell,Collateral,2177.67,0.0,Partial Sell Near BE to Get Capital Back,
 2026-02-10,SGHC * 10,Buy,Collateral,-4372.24,0.0,TMS 58 Accumulation Trap,
+2026-02-13,,Deposit,Global,1100.0,0.0,Due Clearance,IOAQPW0136K
