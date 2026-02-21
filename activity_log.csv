@@ -1,10 +1,11 @@
 Timestamp,Category,Symbol,Action,Details,Amount
+2026-02-21 08:47:15,TMS,ULHC*10,ADD,Recorded Buy via Collateral,-5114.01
 2025-07-18 11:00:00,TRADE,HBL,BUY,Added 10 units (Notes: My First Share as FPO),-1570.0
 2025-07-31 10:00:00,TRADE,DHEL,BUY,Bought 10 units (Closed later),-1000.0
 2025-08-27 10:00:00,TRADE,BANDIPUR,BUY,Bought 10 units (Closed later),-1000.0
 2026-01-04 13:00:00,TRADE,DHEL,SELL,IPO SEll,5509.18
 2026-01-04 13:00:00,TRADE,BANDIPUR,SELL,IPO Sell Maybe Hold Long,7343.03
-2026-01-18 11:00:00,TRADE,ULHC,BUY,Added 20 units (Notes: Sideways Scalping),-9658.90
+2026-01-18 11:00:00,TRADE,ULHC,BUY,Added 20 units (Notes: Sideways Scalping),-9658.9
 2026-01-20 10:00:00,TRADE,TPC,BUY,Bought 10 units (Closed later),-3759.95
 2026-01-29 10:00:00,TRADE,KKHC,BUY,Bought 20 units (Closed later),-4999.58
 2026-01-29 10:00:00,TRADE,NHPC,BUY,Bought 10 units (Closed later),-2248.85
