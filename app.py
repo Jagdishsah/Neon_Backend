@@ -568,7 +568,7 @@ elif menu == "My TMS":
     st.caption("Central hub for Broker Ledger, Cash Flows, and T+2 Settlements")
 
     # Creating the Nested Tabs
-    tms_tabs = st.tabs(["📊 Dashboard", "✍️ Add Transactions", "📜 View Transactions", "🛠️ Manage Data", "⬇️ Export", "📈 Smart Graph"])
+    tms_tabs = st.tabs(["📊 Dashboard", "✍️ Add Transactions", "📜 View Transactions", "🛠️ Manage Data", "⬇️ Export", "📈 Smart Graph", "📝 Action Logs])
     
     # --- TAB 1: THE DASHBOARD ---
     with tms_tabs[0]:
@@ -677,6 +677,8 @@ elif menu == "My TMS":
                     trx_df = get_data("tms/tms_trx.csv")
                     trx_df = pd.concat([trx_df, new_trx], ignore_index=True)
                     save_data("tms/tms_trx.csv", trx_df)
+                    # 👇 NEW: LOG THE ADDITION 👇
+                    log_activity("TMS", stock if stock else "N/A", "ADD", f"Recorded {trx_type} via {medium}", final_amount)
                     
                     st.success(f"✅ Saved! Recorded Rs {final_amount:,.2f} to the ledger.")
                 else:
@@ -753,6 +755,10 @@ elif menu == "My TMS":
                 if confirm_danger:
                     # Detect if rows were deleted or modified (optional logging logic)
                     save_data("tms/tms_trx.csv", edited_df)
+                    
+                    # 👇 NEW: LOG THE FORCE EDIT 👇
+                    log_activity("TMS", "SYSTEM", "FORCE_EDIT", "Forcefully edited raw TMS data", 0)
+                    
                     st.success("✅ Raw data forcefully overwritten. System logic will update on next refresh.")
                     st.rerun()
                 else:
@@ -764,12 +770,14 @@ elif menu == "My TMS":
         
    # --- TAB 5: EXPORT ---
     with tms_tabs[4]:
-        st.subheader("⬇️ Export Data")
+        st.subheader("⬇️ Export TMS Data")
         st.write("Download your entire TMS transaction ledger for local backup, Excel analysis, or tax purposes.")
         
+        # Get the TMS Ledger Data
         trx_df = get_data("tms/tms_trx.csv")
+        
         if not trx_df.empty:
-            # Convert DF to CSV bytes
+            # Convert DataFrame to CSV bytes for the download button
             csv = trx_df.to_csv(index=False).encode('utf-8')
             
             c1, c2 = st.columns(2)
@@ -778,12 +786,26 @@ elif menu == "My TMS":
                 data=csv,
                 file_name=f"TMS_Trx_Ledger_{datetime.now().strftime('%Y%m%d')}.csv",
                 mime="text/csv",
-                type="primary"
+                type="primary",
+                use_container_width=True
             )
-            c1.caption(f"Contains {len(trx_df)} transaction records.")
+            c1.caption(f"Contains {len(trx_df)} total transaction records.")
+            
+            # --- Bonus: Export Master Holdings too ---
+            holdings_df = get_data("tms/tms_holdings.csv")
+            if not holdings_df.empty:
+                holdings_csv = holdings_df.to_csv(index=False).encode('utf-8')
+                c2.download_button(
+                    label="📥 Download Collateral Holdings (CSV)",
+                    data=holdings_csv,
+                    file_name=f"TMS_Collateral_{datetime.now().strftime('%Y%m%d')}.csv",
+                    mime="text/csv",
+                    type="secondary",
+                    use_container_width=True
+                )
+                c2.caption(f"Contains {len(holdings_df)} collateral records.")
         else:
-            st.info("No data available to export.")
-
+            st.info("No TMS transaction data available to export yet.")
     
         
    # --- TAB 6: SMART GRAPH ---
@@ -883,6 +905,47 @@ elif menu == "My TMS":
                 
         else:
             st.info("No data available for graphs.")
+
+
+
+
+      # --- TAB 7: ACTION LOGS ---
+    with tms_tabs[6]:
+        st.subheader("📝 TMS Security & Activity Logs")
+        st.write("Tracks exactly when transactions were added to the system and warns you when a forceful raw data edit occurred.")
+        
+        # Load the global activity log
+        full_log = get_data("activity_log.csv")
+        
+        if not full_log.empty and "TMS" in full_log["Category"].values:
+            # Filter specifically for TMS actions
+            tms_logs = full_log[full_log["Category"] == "TMS"].copy()
+            
+            # Apply color coding to highlight Danger (Force Edits)
+            def color_log(row):
+                if row["Action"] == "FORCE_EDIT": return ["color: #FF4B4B"] * len(row) # Red alert
+                if row["Action"] == "ADD": return ["color: #00FF00"] * len(row) # Green success
+                return [""] * len(row)
+            
+            st.dataframe(
+                tms_logs.style.apply(color_log, axis=1), 
+                use_container_width=True, 
+                hide_index=True
+            )
+            
+            st.markdown("---")
+            
+            # Export Button for Logs
+            csv_log = tms_logs.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 Export TMS Security Logs (CSV)",
+                data=csv_log,
+                file_name=f"TMS_Security_Logs_{datetime.now().strftime('%Y%m%d')}.csv",
+                mime="text/csv",
+                type="primary"
+            )
+        else:
+            st.info("No TMS activity logged yet. Add a transaction to see it appear here.")      
 
 
 
@@ -1661,6 +1724,7 @@ elif menu == "Manage Data":
         if st.button("Save Log Changes"):
             save_data("activity_log.csv", edit_log)
             st.success("Logs Saved.")
+
 
 
 
