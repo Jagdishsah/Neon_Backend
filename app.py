@@ -687,7 +687,7 @@ elif menu == "My TMS":
             stock = c2.text_input("Stock Symbol (Optional)", placeholder="e.g. NABIL").upper()
             
             # Type Selection
-            ttype_sel = c3.selectbox(
+            type_sel = c3.selectbox(
                 "Transaction Type", 
                 ["Buy", "Sell", "Deposit", "Withdraw", "Fine", "IPO", "Collateral Load", "Other"]
             )
@@ -1805,6 +1805,7 @@ elif menu == "Manage Data":
         if st.button("Save Log Changes"):
             save_data("activity_log.csv", edit_log)
             st.success("Logs Saved.")
+
 
 
 
