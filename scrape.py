@@ -25,23 +25,23 @@ from bs4 import BeautifulSoup
      #           return None
             
             # Build a fast dictionary for all stocks
-            result = {}
-            for item in data:
+   #         result = {}
+    #        for item in data:
                 # Make keys lowercase to avoid case-sensitivity issues
-                item_lower = {str(k).lower(): v for k, v in item.items()}
-                sym = item_lower.get('symbol', '')
+   #             item_lower = {str(k).lower(): v for k, v in item.items()}
+#                sym = item_lower.get('symbol', '')
                 
-                if sym:
-                    result[sym.upper()] = {
-                        "price": float(item_lower.get('ltp', item_lower.get('lasttradedprice', 0)) or 0),
-                        "change": float(item_lower.get('change', item_lower.get('schange', 0)) or 0),
-                        "high": float(item_lower.get('high', item_lower.get('highprice', 0)) or 0),
-                        "low": float(item_lower.get('low', item_lower.get('lowprice', 0)) or 0)
-                    }
-            return result
-    except Exception as e:
-        print(f"API Fetch Error: {e}")
-    return None
+    #            if sym:
+     #               result[sym.upper()] = {
+    #                    "price": float(item_lower.get('ltp', item_lower.get('lasttradedprice', 0)) or 0),
+    ##                    "change": float(item_lower.get('change', item_lower.get('schange', 0)) or 0),
+    #                    "high": float(item_lower.get('high', item_lower.get('highprice', 0)) or 0),
+    #                    "low": float(item_lower.get('low', item_lower.get('lowprice', 0)) or 0)
+   #                 }
+   #         return result
+   # except Exception as e:
+   #     print(f"API Fetch Error: {e}")
+   # return None
 
 # --- 2. OLD SCRAPING METHOD (BACKUP) ---
 def fetch_live_single_backup(symbol):
