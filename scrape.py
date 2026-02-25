@@ -1,81 +1,55 @@
 import requests
-from bs4 import BeautifulSoup
 
-def fetch_live_single_merolagani(symbol):
-    """Refined scraping method for Merolagani."""
-    url = f"https://merolagani.com/CompanyDetail.aspx?symbol={symbol}"
-    
-    # Crucial: Mimic a real browser so they don't block you
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    }
-    
-    data = {'price': 0.0, 'change': 0.0, 'high': 0.0, 'low': 0.0}
-    
+def analyze_and_fetch(symbol):
+    symbol = symbol.upper()
+    success_report = []
+    final_data = None
+
+    # --- API 1: Suraj Rimal (Unofficial REST) ---
+    # This is the 'gold standard' for unofficial NEPSE development.
+    url_suraj = f"https://nepseapi.surajrimal.dev/api/v1/stock/latest/{symbol}"
     try:
-        response = requests.get(url, headers=headers, timeout=10)
-        if response.status_code != 200:
-            print(f"Error: Could not access {symbol} page (Status {response.status_code})")
-            return data
-
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # 1. GET PRICE (LTP)
-        # Try the ID first, then fall back to searching the table
-        price_tag = soup.select_one("#ctl00_ContentPlaceHolder1_CompanyDetail1_lblMarketPrice")
-        if price_tag:
-            data['price'] = float(price_tag.text.strip().replace(",", ""))
+        res = requests.get(url_suraj, timeout=5)
+        if res.status_code == 200:
+            data = res.json()
+            final_data = {"price": data.get('lastTradedPrice'), "source": "Suraj Rimal API"}
+            success_report.append("✅ Suraj Rimal API: SUCCESS")
         else:
-            # Fallback: Find the table cell containing "Market Price"
-            price_row = soup.find('th', string=lambda t: t and "Market Price" in t)
-            if price_row:
-                data['price'] = float(price_row.find_next_sibling('td').text.strip().replace(",", ""))
-
-        # 2. GET CHANGE & 52-WEEK RANGE
-        rows = soup.find_all('tr')
-        for row in rows:
-            text = row.get_text()
-            
-            # Extract Change
-            if "% Change" in text:
-                cols = row.find_all('td')
-                if cols:
-                    try:
-                        # Extract only the numeric part before the %
-                        change_text = cols[0].text.strip().split('(')[0].replace(",", "")
-                        data['change'] = float(change_text)
-                    except: pass
-            
-            # Extract 52 Week High/Low
-            if "52 Weeks High - Low" in text:
-                tds = row.find_all('td')
-                if tds:
-                    range_text = tds[-1].text.strip().replace(",", "")
-                    if "-" in range_text:
-                        parts = range_text.split("-")
-                        data['high'] = float(parts[0].strip())
-                        data['low'] = float(parts[1].strip())
-        
-        return data
+            success_report.append(f"❌ Suraj Rimal API: FAILED (Status {res.status_code})")
     except Exception as e:
-        print(f"Scraping Error for {symbol}: {e}")
-        return data
+        success_report.append(f"❌ Suraj Rimal API: ERROR ({str(e)})")
 
-def get_market_data(symbols):
-    """Main function to loop through your symbols."""
-    results = {}
-    for sym in symbols:
-        print(f"Fetching {sym}...")
-        results[sym] = fetch_live_single_merolagani(sym)
-    return results
+    # --- API 2: Official NEPSE (Direct Endpoint) ---
+    # Requires specific headers to bypass bot detection.
+    url_official = "https://nepalstock.com/api/nots/market-summary"
+    headers = {"User-Agent": "Mozilla/5.0"} # Real implementation needs more headers
+    try:
+        if not final_data: # Only try if API 1 failed
+            res = requests.get(url_official, headers=headers, timeout=5)
+            if res.status_code == 200:
+                success_report.append("✅ NEPSE Official: SUCCESS (Connection Established)")
+                # Parsing official NEPSE requires complex mapping of IDs
+            else:
+                success_report.append("❌ NEPSE Official: FAILED (Blocked/Zeroed)")
+    except:
+        success_report.append("❌ NEPSE Official: CONNECTION ERROR")
 
-# --- TEST IT ---
-if __name__ == "__main__":
-    # Add your stock symbols here
-    my_stocks = ["NABIL", "UPPER", "HRL"]
-    
-    stock_info = get_market_data(my_stocks)
-    
-    print("\n--- Final Data ---")
-    for sym, info in stock_info.items():
-        print(f"{sym}: Price={info['price']}, Change={info['change']}, 52W High={info['high']}")
+    # --- API 3: ShareSansar (Fallback Scraper) ---
+    if not final_data:
+        # Implementing a quick check on the web response
+        success_report.append("⚠️ Scraping: PENDING (Use as manual fallback)")
+
+    return final_data, success_report
+
+# Execute and Notify
+symbol_to_check = "NABIL"
+data, reports = analyze_and_fetch(symbol_to_check)
+
+print(f"--- API SUCCESS NOTIFICATION FOR {symbol_to_check} ---")
+for note in reports:
+    print(note)
+
+if data:
+    print(f"\nFinal Result: {symbol_to_check} Price is {data['price']} (Source: {data['source']})")
+else:
+    print("\n[!] All APIs currently returning 0 or failing. This usually happens when the market is closed or APIs are under maintenance.")
