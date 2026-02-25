@@ -2,27 +2,27 @@ import requests
 from bs4 import BeautifulSoup
 
 # --- 1. NEW FAST API FETCH (NAVYA ADVISORS) ---
-def fetch_live_data_api():
-    """Fetches ALL live stock data at once using the Navya API."""
-    url = "https://navyaadvisors.com/api_endpoint/stocks/list/detail"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-        "Accept": "application/json"
-    }
-    try:
-        response = requests.get(url, headers=headers, timeout=10)
-        if response.status_code == 200:
-            data = response.json()
+#def fetch_live_data_api():
+#    """Fetches ALL live stock data at once using the Navya API."""
+ #   url = "https://navyaadvisors.com/api_endpoint/stocks/list/detail"
+ #   headers = {
+  #      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+  #      "Accept": "application/json"
+#    }
+  #  try:
+  #      response = requests.get(url, headers=headers, timeout=10)
+   #     if response.status_code == 200:
+   #         data = response.json()
             
             # Extract the list from JSON structure
-            if isinstance(data, dict):
-                for key in data.keys():
-                    if isinstance(data[key], list):
-                        data = data[key]
-                        break
+   #         if isinstance(data, dict):
+   #             for key in data.keys():
+    #                if isinstance(data[key], list):
+   #                     data = data[key]
+   #                     break
             
-            if not isinstance(data, list):
-                return None
+    #        if not isinstance(data, list):
+     #           return None
             
             # Build a fast dictionary for all stocks
             result = {}
