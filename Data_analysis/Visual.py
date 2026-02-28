@@ -10,7 +10,7 @@ import io
 st.subheader("🎨 Dynamic Visualization Studio")
 st.markdown("High-performance quantitative charting engine.")
 
-@st.cache_data(ttl=60)
+
 def fetch_github_files():
     try:
         g = Github(st.secrets["github"]["token"]) 
