@@ -85,7 +85,7 @@ with tab1:
                         
                         try:
                             g = Github(st.secrets["github"]["token"]) 
-                            repo = g.get_repo(st.secrets["github"]["repo_name"]) # FIXED REPO_NAME
+                            repo = g.get_repo(st.secrets["github"]["repo_name"])
                             
                             try:
                                 file_contents = repo.get_contents(file_path)
@@ -104,10 +104,12 @@ with tab2:
     st.subheader("📂 Browse Saved Data")
     try:
         g = Github(st.secrets["github"]["token"]) 
-        repo = g.get_repo(st.secrets["github"]["repo_name"]) # FIXED REPO_NAME
+        repo = g.get_repo(st.secrets["github"]["repo_name"])
         try:
             saved_files = [f.name for f in repo.get_contents("Data_analysis") if f.name.endswith(".csv")]
-            selected_file = st.selectbox("Select file:", saved_files) if saved_files else None
+            # Fixed: Added unique key to selectbox
+            selected_file = st.selectbox("Select file:", saved_files, key="tab2_browse") if saved_files else None
+            
             if selected_file:
                 file_data = repo.get_contents(f"Data_analysis/{selected_file}")
                 hist_df = pd.read_csv(io.StringIO(file_data.decoded_content.decode('utf-8')))
@@ -120,16 +122,25 @@ with tab2:
 
 with tab3:
     try:
-        with open("Data_analysis/Advanced_analysis.py", encoding="utf-8") as f: exec(compile(f.read(), "Advanced_analysis.py", 'exec'), globals())
+        # Fixed: Run in an isolated namespace to prevent cache/variable collision
+        namespace3 = {"__name__": "advanced_analysis_module"}
+        with open("Data_analysis/Advanced_analysis.py", encoding="utf-8") as f: 
+            exec(compile(f.read(), "Advanced_analysis.py", 'exec'), namespace3)
     except Exception as e: st.error(f"❌ Error loading Advanced Analysis: {e}")
 
 with tab4:
     try:
-        with open("Data_analysis/Visual.py", encoding="utf-8") as f: exec(compile(f.read(), "Visual.py", 'exec'), globals())
+        # Fixed: Isolated namespace
+        namespace4 = {"__name__": "visual_analysis_module"}
+        with open("Data_analysis/Visual.py", encoding="utf-8") as f: 
+            exec(compile(f.read(), "Visual.py", 'exec'), namespace4)
     except FileNotFoundError: st.warning("Create `Visual.py` inside `Data_analysis` folder.")
     except Exception as e: st.error(f"❌ Error loading Visualizations: {e}")
 
 with tab5:
     try:
-        with open("Advisor.py", encoding="utf-8") as f: exec(compile(f.read(), "Advisor.py", 'exec'), globals())
+        # Fixed: Isolated namespace
+        namespace5 = {"__name__": "ai_advisor_module"}
+        with open("Advisor.py", encoding="utf-8") as f: 
+            exec(compile(f.read(), "Advisor.py", 'exec'), namespace5)
     except: st.info("Create `Advisor.py` in the main folder to use AI.")
