@@ -122,25 +122,35 @@ with tab2:
 
 with tab3:
     try:
-        # Fixed: Run in an isolated namespace to prevent cache/variable collision
-        namespace3 = {"__name__": "advanced_analysis_module"}
+        # Inherit the imports (st, pd, etc.) but keep variables isolated!
+        namespace3 = globals().copy() 
+        namespace3["__name__"] = "advanced_analysis_module"
+        
         with open("Data_analysis/Advanced_analysis.py", encoding="utf-8") as f: 
             exec(compile(f.read(), "Advanced_analysis.py", 'exec'), namespace3)
-    except Exception as e: st.error(f"❌ Error loading Advanced Analysis: {e}")
+    except Exception as e: 
+        st.error(f"❌ Error loading Advanced Analysis: {e}")
 
 with tab4:
     try:
-        # Fixed: Isolated namespace
-        namespace4 = {"__name__": "visual_analysis_module"}
+        namespace4 = globals().copy()
+        namespace4["__name__"] = "visual_analysis_module"
+        
         with open("Data_analysis/Visual.py", encoding="utf-8") as f: 
             exec(compile(f.read(), "Visual.py", 'exec'), namespace4)
-    except FileNotFoundError: st.warning("Create `Visual.py` inside `Data_analysis` folder.")
-    except Exception as e: st.error(f"❌ Error loading Visualizations: {e}")
+    except FileNotFoundError: 
+        st.warning("Create `Visual.py` inside `Data_analysis` folder.")
+    except Exception as e: 
+        st.error(f"❌ Error loading Visualizations: {e}")
 
 with tab5:
     try:
-        # Fixed: Isolated namespace
-        namespace5 = {"__name__": "ai_advisor_module"}
+        namespace5 = globals().copy()
+        namespace5["__name__"] = "ai_advisor_module"
+        
         with open("Advisor.py", encoding="utf-8") as f: 
             exec(compile(f.read(), "Advisor.py", 'exec'), namespace5)
-    except: st.info("Create `Advisor.py` in the main folder to use AI.")
+    except FileNotFoundError: 
+        st.info("Create `Advisor.py` in the main folder to use AI.")
+    except Exception as e:
+        st.error(f"❌ Error loading AI Advisor: {e}")
