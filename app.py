@@ -91,39 +91,34 @@ def get_data(filename):
     except Exception as e:
         if filename != "error_log.csv":
             log_error(f"get_data: {filename}", str(e))
-        # Define schemas
+            
+        # --- CLEANED SCHEMA DEFINITIONS ---
         if "portfolio" in filename: 
             cols = ["Symbol", "Sector", "Units", "Total_Cost", "WACC", "Buy_Date", "Stop_Loss", "Notes"]
-        elif "watchlist" in filename: cols = ["Symbol", "Target", "Remark"]
-            # Add this line inside get_data schema:
+        elif "watchlist" in filename: 
+            cols = ["Symbol", "Target", "Remark"]
         elif "activity_log" in filename:
             cols = ["Timestamp", "Category", "Symbol", "Action", "Details", "Amount"]
         elif "history" in filename: 
             cols = ["Date", "Buy_Date", "Symbol", "Units", "Buy_Price", "Sell_Price", "Invested_Amount", "Received_Amount", "Net_PL", "PL_Pct", "Reason"]
-        elif "diary" in filename: cols = ["Date", "Symbol", "Note", "Emotion", "Mistake", "Strategy"]
-        elif "cache" in filename: cols = ["Symbol", "LTP", "Change", "High52", "Low52", "LastUpdated"]
-        elif "wealth" in filename: cols = ["Date", "Total_Investment", "Current_Value", "Total_PL", "Day_Change", "Sold_Volume"]
-        # 👇 ADD THIS NEW LINE 👇
-        elif "price_log" in filename: cols = ["Date", "Symbol", "LTP"]
-        # Add this line inside the get_data function schema list:
-
+        elif "diary" in filename: 
+            cols = ["Date", "Symbol", "Note", "Emotion", "Mistake", "Strategy"]
+        elif "cache" in filename: 
+            cols = ["Symbol", "LTP", "Change", "High52", "Low52", "LastUpdated"]
+        elif "wealth" in filename: 
+            cols = ["Date", "Total_Investment", "Current_Value", "Total_PL", "Day_Change", "Sold_Volume"]
+        elif "price_log" in filename: 
+            cols = ["Date", "Symbol", "LTP"]
         elif "Data" in filename: 
             cols = ["Date", "Realized_PL", "Realized_PL_Pct", "Unrealized_PL", "Unrealized_PL_Pct"]
-        # 👇 NEW TMS SCHEMAS 👇
         elif "tms_ledger_master" in filename:
             cols = ["Date", "Type", "Category", "Amount", "Status", "Due_Date", "Ref_ID", "Description", "Is_Non_Cash", "Dispute_Note", "Fiscal_Year"]
         elif "tms_holdings" in filename:
             cols = ["Symbol", "Total_Qty", "Pledged_Qty", "LTP", "Haircut"]
-
-        elif "wealth" in filename: cols = ["Date", "Total_Investment", "Current_Value", "Total_PL", "Day_Change", "Sold_Volume"]
-        elif "price_log" in filename: cols = ["Date", "Symbol", "LTP"]
-        elif "Data" in filename: cols = ["Date", "Realized_PL", "Realized_PL_Pct", "Unrealized_PL", "Unrealized_PL_Pct"]
-        
-        
         elif "tms_trx" in filename:
             cols = ["Date", "Stock", "Type", "Medium", "Amount", "Charge", "Remark", "Reference"]
-        
-        else: cols = []
+        else: 
+            cols = []
             
         return pd.DataFrame(columns=cols)
 
@@ -1867,6 +1862,7 @@ elif menu == "Manage Data":
                     st.rerun()
         except Exception:
             st.success("System is running perfectly! No errors logged. 🎉")
+
 
 
 
