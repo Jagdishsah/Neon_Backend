@@ -10,7 +10,7 @@ st.markdown("Your personal AI analyst powered by Google Gemini. Select a dataset
 # --- 1. CONFIGURE GEMINI API ---
 try:
     genai.configure(api_key=st.secrets["gemini"]["api_key"])
-    model = genai.GenerativeModel('gemini-1.5-flash') # Fast, smart, and efficient
+    model = genai.GenerativeModel('gemini-2.0-flash') # Fast, smart, and efficient
 except KeyError:
     st.error("❌ Gemini API Key not found. Please add `[gemini]` and `api_key = 'YOUR_KEY'` to your `.streamlit/secrets.toml` file.")
     st.stop()
