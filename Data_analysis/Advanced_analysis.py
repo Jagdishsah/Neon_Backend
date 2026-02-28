@@ -7,7 +7,7 @@ import io
 
 st.subheader("🚀 Advanced Quantitative Analysis")
 
-@st.cache_data(ttl=60)
+
 def fetch_github_files():
     try:
         g = Github(st.secrets["github"]["token"]) 
