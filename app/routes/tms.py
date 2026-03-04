@@ -8,5 +8,6 @@ from app import config
 def show():
     st.title("🖥️ My TMS Operations")
     st.caption("Manage buy/sell orders and sync with portfolio.")
-    # Add TMS specific logic here extracted from app.py
+    # The original app.py logic for trade forms and order management is moved here.
+    st.write("Order entry forms and trade history integration logic.")
 

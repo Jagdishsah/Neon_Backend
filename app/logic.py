@@ -31,16 +31,16 @@ def update_wealth_log():
         port_df = get_data("portfolio.csv")
         cache_df = get_data("cache.csv")
         inv, val, pl, pct = calculate_metrics(port_df, cache_df)
-        
+
         wealth_df = get_data("wealth.csv")
         today = datetime.now().strftime("%Y-%m-%d")
-        
+
         new_record = {"Date": today, "Total_Investment": inv, "Current_Value": val, "Total_PL": pl}
         if not wealth_df.empty and wealth_df.iloc[-1]['Date'] == today:
             wealth_df.iloc[-1] = new_record
         else:
             wealth_df = pd.concat([wealth_df, pd.DataFrame([new_record])], ignore_index=True)
-        
+
         save_data("wealth.csv", wealth_df, f"Wealth update: {today}")
     except Exception as e:
         log_error("update_wealth_log", str(e))

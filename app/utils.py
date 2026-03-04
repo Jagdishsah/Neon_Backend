@@ -23,7 +23,6 @@ def get_data(filename):
         content = repo.get_contents(f"data/{filename}")
         return pd.read_csv(StringIO(content.decoded_content.decode("utf-8")))
     except Exception as e:
-        # Simplified for module extraction; app.py had complex logic here
         return pd.DataFrame()
 
 def save_data(filename, df, message):
