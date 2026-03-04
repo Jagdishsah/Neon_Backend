@@ -1,4 +1,4 @@
-Date,Time,Context,Error_Message,Traceback
+Date,Time,Context,Error_Message,Traceback,Timestamp,Function,Error
 2026-02-21,07:13:47,get_data: tms/tms_holdings.csv,"404 {""message"": ""Not Found"", ""documentation_url"": ""https://docs.github.com/rest/repos/contents#get-repository-content"", ""status"": ""404""}","Traceback (most recent call last):
   File ""/mount/src/nepse_terminal/app.py"", line 89, in get_data
     content = repo.get_contents(filename)
@@ -25,7 +25,7 @@ Date,Time,Context,Error_Message,Traceback
   File ""/home/adminuser/venv/lib/python3.13/site-packages/github/Requester.py"", line 853, in __check
     raise self.createException(status, responseHeaders, data)
 github.GithubException.UnknownObjectException: 404 {""message"": ""Not Found"", ""documentation_url"": ""https://docs.github.com/rest/repos/contents#get-repository-content"", ""status"": ""404""}
-"
+",,,
 2026-02-21,07:14:14,get_data: tms/tms_holdings.csv,"404 {""message"": ""Not Found"", ""documentation_url"": ""https://docs.github.com/rest/repos/contents#get-repository-content"", ""status"": ""404""}","Traceback (most recent call last):
   File ""/mount/src/nepse_terminal/app.py"", line 89, in get_data
     content = repo.get_contents(filename)
@@ -52,7 +52,7 @@ github.GithubException.UnknownObjectException: 404 {""message"": ""Not Found"", 
   File ""/home/adminuser/venv/lib/python3.13/site-packages/github/Requester.py"", line 853, in __check
     raise self.createException(status, responseHeaders, data)
 github.GithubException.UnknownObjectException: 404 {""message"": ""Not Found"", ""documentation_url"": ""https://docs.github.com/rest/repos/contents#get-repository-content"", ""status"": ""404""}
-"
+",,,
 2026-02-21,07:30:09,get_data: tms/tms_holdings.csv,"404 {""message"": ""Not Found"", ""documentation_url"": ""https://docs.github.com/rest/repos/contents#get-repository-content"", ""status"": ""404""}","Traceback (most recent call last):
   File ""/mount/src/nepse_terminal/app.py"", line 89, in get_data
     content = repo.get_contents(filename)
@@ -79,7 +79,7 @@ github.GithubException.UnknownObjectException: 404 {""message"": ""Not Found"", 
   File ""/home/adminuser/venv/lib/python3.13/site-packages/github/Requester.py"", line 853, in __check
     raise self.createException(status, responseHeaders, data)
 github.GithubException.UnknownObjectException: 404 {""message"": ""Not Found"", ""documentation_url"": ""https://docs.github.com/rest/repos/contents#get-repository-content"", ""status"": ""404""}
-"
+",,,
 2026-02-21,07:49:38,get_data: tms/tms_holdings.csv,"404 {""message"": ""Not Found"", ""documentation_url"": ""https://docs.github.com/rest/repos/contents#get-repository-content"", ""status"": ""404""}","Traceback (most recent call last):
   File ""/mount/src/nepse_terminal/app.py"", line 89, in get_data
     content = repo.get_contents(filename)
@@ -106,7 +106,7 @@ github.GithubException.UnknownObjectException: 404 {""message"": ""Not Found"", 
   File ""/home/adminuser/venv/lib/python3.13/site-packages/github/Requester.py"", line 853, in __check
     raise self.createException(status, responseHeaders, data)
 github.GithubException.UnknownObjectException: 404 {""message"": ""Not Found"", ""documentation_url"": ""https://docs.github.com/rest/repos/contents#get-repository-content"", ""status"": ""404""}
-"
+",,,
 2026-02-21,11:50:21,get_data: tms/tms_holdings.csv,"404 {""message"": ""Not Found"", ""documentation_url"": ""https://docs.github.com/rest/repos/contents#get-repository-content"", ""status"": ""404""}","Traceback (most recent call last):
   File ""/mount/src/nepse_terminal/app.py"", line 89, in get_data
     content = repo.get_contents(filename)
@@ -133,7 +133,7 @@ github.GithubException.UnknownObjectException: 404 {""message"": ""Not Found"", 
   File ""/home/adminuser/venv/lib/python3.13/site-packages/github/Requester.py"", line 853, in __check
     raise self.createException(status, responseHeaders, data)
 github.GithubException.UnknownObjectException: 404 {""message"": ""Not Found"", ""documentation_url"": ""https://docs.github.com/rest/repos/contents#get-repository-content"", ""status"": ""404""}
-"
+",,,
 2026-02-21,16:48:46,get_data: tms/tms_holdings.csv,"404 {""message"": ""Not Found"", ""documentation_url"": ""https://docs.github.com/rest/repos/contents#get-repository-content"", ""status"": ""404""}","Traceback (most recent call last):
   File ""/mount/src/nepse_terminal/app.py"", line 89, in get_data
     content = repo.get_contents(filename)
@@ -160,7 +160,7 @@ github.GithubException.UnknownObjectException: 404 {""message"": ""Not Found"", 
   File ""/home/adminuser/venv/lib/python3.13/site-packages/github/Requester.py"", line 853, in __check
     raise self.createException(status, responseHeaders, data)
 github.GithubException.UnknownObjectException: 404 {""message"": ""Not Found"", ""documentation_url"": ""https://docs.github.com/rest/repos/contents#get-repository-content"", ""status"": ""404""}
-"
+",,,
 2026-02-21,16:59:04,get_data: tms/tms_holdings.csv,"404 {""message"": ""Not Found"", ""documentation_url"": ""https://docs.github.com/rest/repos/contents#get-repository-content"", ""status"": ""404""}","Traceback (most recent call last):
   File ""/mount/src/nepse_terminal/app.py"", line 89, in get_data
     content = repo.get_contents(filename)
@@ -187,7 +187,7 @@ github.GithubException.UnknownObjectException: 404 {""message"": ""Not Found"", 
   File ""/home/adminuser/venv/lib/python3.13/site-packages/github/Requester.py"", line 853, in __check
     raise self.createException(status, responseHeaders, data)
 github.GithubException.UnknownObjectException: 404 {""message"": ""Not Found"", ""documentation_url"": ""https://docs.github.com/rest/repos/contents#get-repository-content"", ""status"": ""404""}
-"
+",,,
 2026-02-21,17:33:11,get_data: tms/tms_holdings.csv,"404 {""message"": ""Not Found"", ""documentation_url"": ""https://docs.github.com/rest/repos/contents#get-repository-content"", ""status"": ""404""}","Traceback (most recent call last):
   File ""/mount/src/nepse_terminal/app.py"", line 89, in get_data
     content = repo.get_contents(filename)
@@ -214,7 +214,7 @@ github.GithubException.UnknownObjectException: 404 {""message"": ""Not Found"", 
   File ""/home/adminuser/venv/lib/python3.13/site-packages/github/Requester.py"", line 853, in __check
     raise self.createException(status, responseHeaders, data)
 github.GithubException.UnknownObjectException: 404 {""message"": ""Not Found"", ""documentation_url"": ""https://docs.github.com/rest/repos/contents#get-repository-content"", ""status"": ""404""}
-"
+",,,
 2026-02-22,14:57:01,get_data: tms/tms_holdings.csv,"404 {""message"": ""Not Found"", ""documentation_url"": ""https://docs.github.com/rest/repos/contents#get-repository-content"", ""status"": ""404""}","Traceback (most recent call last):
   File ""/mount/src/nepse_terminal/app.py"", line 89, in get_data
     content = repo.get_contents(filename)
@@ -241,7 +241,7 @@ github.GithubException.UnknownObjectException: 404 {""message"": ""Not Found"", 
   File ""/home/adminuser/venv/lib/python3.13/site-packages/github/Requester.py"", line 853, in __check
     raise self.createException(status, responseHeaders, data)
 github.GithubException.UnknownObjectException: 404 {""message"": ""Not Found"", ""documentation_url"": ""https://docs.github.com/rest/repos/contents#get-repository-content"", ""status"": ""404""}
-"
+",,,
 2026-02-25,12:55:08,get_data: tms/tms_holdings.csv,"404 {""message"": ""Not Found"", ""documentation_url"": ""https://docs.github.com/rest/repos/contents#get-repository-content"", ""status"": ""404""}","Traceback (most recent call last):
   File ""/mount/src/nepse_terminal/app.py"", line 89, in get_data
     content = repo.get_contents(filename)
@@ -268,7 +268,7 @@ github.GithubException.UnknownObjectException: 404 {""message"": ""Not Found"", 
   File ""/home/adminuser/venv/lib/python3.13/site-packages/github/Requester.py"", line 853, in __check
     raise self.createException(status, responseHeaders, data)
 github.GithubException.UnknownObjectException: 404 {""message"": ""Not Found"", ""documentation_url"": ""https://docs.github.com/rest/repos/contents#get-repository-content"", ""status"": ""404""}
-"
+",,,
 2026-02-26,01:17:11,get_data: tms/tms_holdings.csv,"404 {""message"": ""Not Found"", ""documentation_url"": ""https://docs.github.com/rest/repos/contents#get-repository-content"", ""status"": ""404""}","Traceback (most recent call last):
   File ""/mount/src/nepse_terminal/app.py"", line 89, in get_data
     content = repo.get_contents(filename)
@@ -295,7 +295,7 @@ github.GithubException.UnknownObjectException: 404 {""message"": ""Not Found"", 
   File ""/home/adminuser/venv/lib/python3.13/site-packages/github/Requester.py"", line 853, in __check
     raise self.createException(status, responseHeaders, data)
 github.GithubException.UnknownObjectException: 404 {""message"": ""Not Found"", ""documentation_url"": ""https://docs.github.com/rest/repos/contents#get-repository-content"", ""status"": ""404""}
-"
+",,,
 2026-02-28,13:46:00,get_data: tms/tms_holdings.csv,"404 {""message"": ""Not Found"", ""documentation_url"": ""https://docs.github.com/rest/repos/contents#get-repository-content"", ""status"": ""404""}","Traceback (most recent call last):
   File ""/mount/src/nepse_terminal/app.py"", line 89, in get_data
     content = repo.get_contents(filename)
@@ -322,7 +322,7 @@ github.GithubException.UnknownObjectException: 404 {""message"": ""Not Found"", 
   File ""/home/adminuser/venv/lib/python3.13/site-packages/github/Requester.py"", line 853, in __check
     raise self.createException(status, responseHeaders, data)
 github.GithubException.UnknownObjectException: 404 {""message"": ""Not Found"", ""documentation_url"": ""https://docs.github.com/rest/repos/contents#get-repository-content"", ""status"": ""404""}
-"
+",,,
 2026-02-28,17:28:46,get_data: tms/tms_holdings.csv,"404 {""message"": ""Not Found"", ""documentation_url"": ""https://docs.github.com/rest/repos/contents#get-repository-content"", ""status"": ""404""}","Traceback (most recent call last):
   File ""/mount/src/nepse_terminal/app.py"", line 89, in get_data
     content = repo.get_contents(filename)
@@ -349,7 +349,7 @@ github.GithubException.UnknownObjectException: 404 {""message"": ""Not Found"", 
   File ""/home/adminuser/venv/lib/python3.13/site-packages/github/Requester.py"", line 853, in __check
     raise self.createException(status, responseHeaders, data)
 github.GithubException.UnknownObjectException: 404 {""message"": ""Not Found"", ""documentation_url"": ""https://docs.github.com/rest/repos/contents#get-repository-content"", ""status"": ""404""}
-"
+",,,
 2026-03-01,10:12:15,get_data: tms/tms_holdings.csv,"404 {""message"": ""Not Found"", ""documentation_url"": ""https://docs.github.com/rest/repos/contents#get-repository-content"", ""status"": ""404""}","Traceback (most recent call last):
   File ""/mount/src/nepse_terminal/app.py"", line 89, in get_data
     content = repo.get_contents(filename)
@@ -376,7 +376,7 @@ github.GithubException.UnknownObjectException: 404 {""message"": ""Not Found"", 
   File ""/home/adminuser/venv/lib/python3.13/site-packages/github/Requester.py"", line 853, in __check
     raise self.createException(status, responseHeaders, data)
 github.GithubException.UnknownObjectException: 404 {""message"": ""Not Found"", ""documentation_url"": ""https://docs.github.com/rest/repos/contents#get-repository-content"", ""status"": ""404""}
-"
+",,,
 2026-03-01,11:08:02,get_data: tms/tms_holdings.csv,"404 {""message"": ""Not Found"", ""documentation_url"": ""https://docs.github.com/rest/repos/contents#get-repository-content"", ""status"": ""404""}","Traceback (most recent call last):
   File ""/mount/src/nepse_terminal/app.py"", line 89, in get_data
     content = repo.get_contents(filename)
@@ -403,7 +403,7 @@ github.GithubException.UnknownObjectException: 404 {""message"": ""Not Found"", 
   File ""/home/adminuser/venv/lib/python3.13/site-packages/github/Requester.py"", line 853, in __check
     raise self.createException(status, responseHeaders, data)
 github.GithubException.UnknownObjectException: 404 {""message"": ""Not Found"", ""documentation_url"": ""https://docs.github.com/rest/repos/contents#get-repository-content"", ""status"": ""404""}
-"
+",,,
 2026-03-01,11:14:29,get_data: tms/tms_holdings.csv,"404 {""message"": ""Not Found"", ""documentation_url"": ""https://docs.github.com/rest/repos/contents#get-repository-content"", ""status"": ""404""}","Traceback (most recent call last):
   File ""/mount/src/nepse_terminal/app.py"", line 89, in get_data
     content = repo.get_contents(filename)
@@ -430,7 +430,7 @@ github.GithubException.UnknownObjectException: 404 {""message"": ""Not Found"", 
   File ""/home/adminuser/venv/lib/python3.13/site-packages/github/Requester.py"", line 853, in __check
     raise self.createException(status, responseHeaders, data)
 github.GithubException.UnknownObjectException: 404 {""message"": ""Not Found"", ""documentation_url"": ""https://docs.github.com/rest/repos/contents#get-repository-content"", ""status"": ""404""}
-"
+",,,
 2026-03-01,13:38:42,get_data: tms/tms_holdings.csv,"404 {""message"": ""Not Found"", ""documentation_url"": ""https://docs.github.com/rest/repos/contents#get-repository-content"", ""status"": ""404""}","Traceback (most recent call last):
   File ""/mount/src/nepse_terminal/app.py"", line 89, in get_data
     content = repo.get_contents(filename)
@@ -457,7 +457,7 @@ github.GithubException.UnknownObjectException: 404 {""message"": ""Not Found"", 
   File ""/home/adminuser/venv/lib/python3.13/site-packages/github/Requester.py"", line 853, in __check
     raise self.createException(status, responseHeaders, data)
 github.GithubException.UnknownObjectException: 404 {""message"": ""Not Found"", ""documentation_url"": ""https://docs.github.com/rest/repos/contents#get-repository-content"", ""status"": ""404""}
-"
+",,,
 2026-03-03,06:58:12,get_data: tms/tms_holdings.csv,"404 {""message"": ""Not Found"", ""documentation_url"": ""https://docs.github.com/rest/repos/contents#get-repository-content"", ""status"": ""404""}","Traceback (most recent call last):
   File ""/mount/src/nepse_terminal/app.py"", line 89, in get_data
     content = repo.get_contents(filename)
@@ -484,4 +484,5 @@ github.GithubException.UnknownObjectException: 404 {""message"": ""Not Found"", 
   File ""/home/adminuser/venv/lib/python3.13/site-packages/github/Requester.py"", line 853, in __check
     raise self.createException(status, responseHeaders, data)
 github.GithubException.UnknownObjectException: 404 {""message"": ""Not Found"", ""documentation_url"": ""https://docs.github.com/rest/repos/contents#get-repository-content"", ""status"": ""404""}
-"
+",,,
+,,,,,2026-03-04 16:42:51,refresh_market_cache,get_market_data() missing 1 required positional argument: 'symbols'
